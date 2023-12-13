@@ -7,6 +7,6 @@
 #ifndef __SENSOR_TASK_H__
 #define __SENSOR_TASK_H__
 
-extern uint32_t SensorTaskInit(void);
+extern uint32_t Sensor_Task_Init(void);
 
 #endif // __SENSOR_TASK_H__

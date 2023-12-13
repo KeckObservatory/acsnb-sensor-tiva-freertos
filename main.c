@@ -34,6 +34,7 @@
 #include "semphr.h"
 
 // Tasks
+#include "spi_task.h"
 #include "sensor_task.h"
 
 
@@ -608,6 +609,8 @@ uint16_t I2CReceive2(uint32_t slave_addr, uint8_t reg) {
     return (msb << 8) | lsb;
 }
 
+
+
 //*****************************************************************************
 //
 // Initialize FreeRTOS and start the initial set of tasks.
@@ -634,11 +637,15 @@ int main(void) {
     semHandle = xSemaphoreCreateMutex();
 
     // Create the sensor task.
-    if(SensorTaskInit() != 0) {
+    if(Sensor_Task_Init() != 0) {
         while(1) {
         }
     }
 
+    if(SPI_Task_Init() != 0) {
+        while(1) {
+        }
+    }
 
 
 
@@ -654,11 +661,16 @@ int main(void) {
     GPIOPinConfigure(GPIO_PA4_SSI0RX);
     GPIOPinConfigure(GPIO_PA5_SSI0TX);
 
-    GPIOPinTypeSSI(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 |
-                                    GPIO_PIN_4 | GPIO_PIN_5);
+    GPIOPinTypeSSI(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
 
     /* Configure the SSI. */
-    SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_0, SSI_MODE_SLAVE, 2000000, 8);
+    SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
+
+    /* Register an interrupt handler for FIFO events */
+    SSIIntRegister(SSI0_BASE, SPI_ISR);
+
+    /* Interrupt when the transmit FIFO is half full, and when empty */
+    SSIIntEnable(SSI0_BASE, SSI_TXFF | SSI_TXEOT);
 
     /* Enable the SSI module. */
     SSIEnable(SSI0_BASE);
@@ -703,8 +715,18 @@ int main(void) {
 
 
 
+    // Enable the GPIO port that is used for the on-board LED.
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF))
+    {
+    }
 
+    // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
+    // enable the GPIO pin for digital function.
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
 
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3); // on
+    //GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0); // off
 
 
 
