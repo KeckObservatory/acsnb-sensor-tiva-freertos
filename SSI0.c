@@ -120,6 +120,8 @@ void SSI0Init_old(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuff
 
 void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[], uint16_t length) {
 
+    static volatile uint32_t myclock = 0;
+
     /*
      * Initialize flags for receiving message.
      */
@@ -149,6 +151,8 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
     GPIOPinConfigure(GPIO_PA4_SSI0RX);
     GPIOPinConfigure(GPIO_PA5_SSI0TX);
     GPIOPinTypeSSI(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
+
+    myclock = SysCtlClockGet();
 
     SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
     //SSIConfigSetExpClk(SSI0_BASE, g_ui32SysClock, SSI_FRF_MOTO_MODE_3,SSI_MODE_MASTER, 1000000, 8);
@@ -320,7 +324,7 @@ void InitSPITransfer(void) {
     //
     uDMAChannelControlSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
                           UDMA_SIZE_8 | UDMA_SRC_INC_NONE | UDMA_DST_INC_8 |
-                          UDMA_ARB_4);
+                          UDMA_ARB_2); //UDMA_ARB_4);
 
     //
     // Set up the transfer parameters for the SSI0RX Channel
@@ -358,7 +362,7 @@ void InitSPITransfer(void) {
     //
     uDMAChannelControlSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
                           UDMA_SIZE_8 | UDMA_SRC_INC_8 | UDMA_DST_INC_NONE |
-                          UDMA_ARB_4);
+                          UDMA_ARB_2); //UDMA_ARB_4);
 
 
     //
