@@ -1,72 +1,44 @@
-#include <stdbool.h>
-#include <stdint.h>
-#include "inc/hw_memmap.h"
-#include "inc/hw_types.h"
-#include "driverlib/ssi.h"
-//#include "driverlib/gpio.h"
-#include "utils/uartstdio.h"
-#include "sensor_task.h"
-#include "priorities.h"
-#include "FreeRTOS.h"
-#include "task.h"
-#include "queue.h"
-#include "semphr.h"
+#include "spi_task.h"
+#include "uDMA.h"
+#include "SSI0.h"
+#include <inc/tm4c123gh6pm.h>
+#include <driverlib/udma.h>
+#include <driverlib/sysctl.h>
+#include <driverlib/interrupt.h>
 
 #define SPI_TASK_STACK_SIZE     128  // Stack size in words
 #define SPI_ITEM_SIZE           sizeof(uint8_t)
 #define SPI_QUEUE_SIZE          5
 
-bool spiFIFOClear;
-xQueueHandle g_pLEDQueue;
+static bool SSI0received;
+static bool SSI0sent;
+
+//xQueueHandle g_pLEDQueue;
 extern xSemaphoreHandle g_pUARTSemaphore;
 
-#define SPI_MAX_BUFFER 10
-uint8_t buffer[SPI_MAX_BUFFER];
-uint8_t bufptr;
+#define SPI_MAX_BUFFER 119
+uint8_t rx_buffer[SPI_MAX_BUFFER];
+uint8_t tx_buffer[SPI_MAX_BUFFER];
 
 
-/*
- * Interrupt handler for SPI (aka SSI) peripheral.
- */
-void SPI_ISR(void) {
-
-    uint8_t i;
-    uint8_t count;
-    uint32_t interrupt_status;
-    uint32_t rxbyte;
-
-    /* Determine which interrupt got us here */
-    interrupt_status = SSIIntStatus(SSI0_BASE, true);
-
-    /* Clear all the SPI interrupts */
-    SSIIntClear(SSI0_BASE, 0x7F);
-
-    /* Receive data */
-    count = 0;
-    while (count > 0) {
-        count = SSIDataGetNonBlocking(SSI0_BASE, &rxbyte);
-    }
+//*****************************************************************************
+//
+// The control table used by the uDMA controller.  This table must be aligned
+// to a 1024 byte boundary.
+//
+//*****************************************************************************
+#if defined(ewarm)
+#pragma data_alignment=1024
+uint8_t pui8ControlTable[1024];
+#elif defined(ccs)
+#pragma DATA_ALIGN(pui8ControlTable, 1024)
+uint8_t pui8ControlTable[1024];
+#else
+uint8_t pui8ControlTable[1024] __attribute__ ((aligned(1024)));
+#endif
 
 
-    /* Or is the transmit FIFO either half or completely empty? */
-    if (interrupt_status & (SSI_TXFF|SSI_TXEOT)) {
 
-        /* Load more message into the FIFO */
-        for (i = bufptr; i < SPI_MAX_BUFFER; i++) {
-
-           count = SSIDataPutNonBlocking(SSI0_BASE, buffer[i]);
-
-           /* Exit when TX buffer is full but remember how much of the
-            * message was inserted */
-           if (count == 0) {
-               break;
-           } else {
-               bufptr += count;
-           }
-        }
-
-   }
-}
 
 /*
  * RTOS task for handling the SPI interface back to the Beaglebone.
@@ -75,8 +47,6 @@ static void SPI_Task(void *pvParameters) {
 
     portTickType ui32WakeTime;
     uint32_t spiTaskDelay;
-    uint8_t i;
-    int32_t count;
 
     spiTaskDelay = 10;
 
@@ -86,24 +56,12 @@ static void SPI_Task(void *pvParameters) {
     // Loop forever.
     while (1) {
 
-        /* Pre-load the buffer with part of the message */
-        if (spiFIFOClear) {
 
-            spiFIFOClear = false;
-            bufptr = 0;
+        if (SSI0received == true) {
 
-            for (i = 0; i < SPI_MAX_BUFFER; i++) {
-                count = SSIDataPutNonBlocking(SSI0_BASE, buffer[i]);
-
-                /* Exit when TX buffer is full but remember how much of the
-                 * message was inserted */
-                if (count == 0) {
-                    break;
-                } else {
-                    bufptr += count;
-                }
-            }
-
+            SSI0received = false;
+            SSI0sent = false;
+            //SSI0SendMessage();
         }
 
         // Wait for the required amount of time.
@@ -116,20 +74,50 @@ static void SPI_Task(void *pvParameters) {
  */
 uint32_t SPI_Task_Init(void) {
 
-    spiFIFOClear = false;
+    uint8_t i;
 
-    buffer[0] = 0x1F;
-    buffer[1] = 0x1E;
-    buffer[2] = 0x1D;
-    buffer[3] = 0x1C;
-    buffer[4] = 0x1B;
-    buffer[5] = 0x1A;
-    buffer[6] = 0x09;
-    buffer[7] = 0x08;
-    buffer[8] = 0x07;
-    buffer[9] = 0x06;
-    bufptr = 0;
+    tx_buffer[0] = 0xAA;
+    tx_buffer[1] = 0x55;
 
+    for (i = 2; i < SPI_MAX_BUFFER; i++) {
+        tx_buffer[i] = i;
+    }
+
+    for (i = 0; i < SPI_MAX_BUFFER; i++) {
+        rx_buffer[i] = 0x11;
+    }
+
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
+    SysCtlPeripheralSleepEnable(SYSCTL_PERIPH_UDMA);
+
+    /* Init the SSI0 device for DMA usage */
+    SSI0Init(&SSI0received, &SSI0sent, rx_buffer, tx_buffer, SPI_MAX_BUFFER);
+
+    //
+    // Enable the uDMA controller error interrupt.  This interrupt will occur
+    // if there is a bus error during a transfer.
+    //
+    IntEnable(INT_UDMAERR);
+
+    //
+    // Enable the uDMA controller.
+    //
+    uDMAEnable();
+
+    //
+    // Point at the control table to use for channel control structures.
+    //
+    uDMAControlBaseSet(pui8ControlTable);
+
+    //
+    // Initialize the uDMA SPI transfers.
+    //
+    InitSPITransfer();
+
+
+
+
+    /* Create the RTOS task */
     if (xTaskCreate(SPI_Task, (const portCHAR *)"SPI", SPI_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {
         return(1);

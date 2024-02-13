@@ -13,10 +13,11 @@
 #include <stdint.h>
 
 // Board support includes
-#include "inc/hw_i2c.h"
 #include "inc/hw_memmap.h"
 #include "inc/hw_types.h"
 #include "inc/hw_gpio.h"
+#include "inc/hw_i2c.h"
+
 #include "driverlib/sysctl.h"
 #include "driverlib/gpio.h"
 #include "driverlib/i2c.h"
@@ -36,6 +37,8 @@
 // Tasks
 #include "spi_task.h"
 #include "sensor_task.h"
+
+#include "uDMA.h"
 
 
 
@@ -628,6 +631,9 @@ int main(void) {
     // Initialize the I2C busses (6 of them)
     InitI2C0();
 
+
+    SysCtlPeripheralClockGating(true);
+
     UARTprintf("\n\nACS Node Box sensor module started\n");
 
     //temphum = I2CReceive(0x40, 0xE3);
@@ -649,31 +655,7 @@ int main(void) {
 
 
 
-    /* SPI0 */
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI0);
 
-    /* Wait for the SSI0 module to be ready. */
-    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_SSI0)) {};
-
-    /* Need to unlock PF0 */
-    GPIOPinConfigure(GPIO_PA2_SSI0CLK);
-    GPIOPinConfigure(GPIO_PA3_SSI0FSS);
-    GPIOPinConfigure(GPIO_PA4_SSI0RX);
-    GPIOPinConfigure(GPIO_PA5_SSI0TX);
-
-    GPIOPinTypeSSI(GPIO_PORTA_BASE, GPIO_PIN_2 | GPIO_PIN_3 | GPIO_PIN_4 | GPIO_PIN_5);
-
-    /* Configure the SSI. */
-    SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
-
-    /* Register an interrupt handler for FIFO events */
-    SSIIntRegister(SSI0_BASE, SPI_ISR);
-
-    /* Interrupt when the transmit FIFO is half full, and when empty */
-    SSIIntEnable(SSI0_BASE, SSI_TXFF | SSI_TXEOT);
-
-    /* Enable the SSI module. */
-    SSIEnable(SSI0_BASE);
 
 
 
@@ -711,10 +693,6 @@ int main(void) {
 
 
 
-
-
-
-
     // Enable the GPIO port that is used for the on-board LED.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
     while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF))
@@ -730,10 +708,8 @@ int main(void) {
 
 
 
-
-
-
-
+    /* All tasks are primed, enable interrupts */
+    IntMasterEnable();
 
 
 
