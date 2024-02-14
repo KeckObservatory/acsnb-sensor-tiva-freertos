@@ -1,7 +1,7 @@
 /*
  * main.c
  *
- * Copyright (c) 2023, W. M. Keck Observatory
+ * Copyright (c) 2024, W. M. Keck Observatory
  * All rights reserved.
  *
  * Author: Paul Richards
@@ -13,23 +13,26 @@
 #include <stdint.h>
 
 // Board support includes
-#include "inc/hw_memmap.h"
-#include "inc/hw_types.h"
-#include "inc/hw_gpio.h"
-#include "inc/hw_i2c.h"
+#include <inc/tm4c123gh6pm.h>
+#include <inc/hw_memmap.h>
+#include <inc/hw_types.h>
+#include <inc/hw_gpio.h>
+#include <inc/hw_i2c.h>
 
-#include "driverlib/sysctl.h"
-#include "driverlib/gpio.h"
-#include "driverlib/i2c.h"
-#include "driverlib/ssi.h"
-#include "driverlib/pin_map.h"
-#include "driverlib/rom.h"
-#include "driverlib/sysctl.h"
-#include "driverlib/uart.h"
-#include "utils/uartstdio.h"
+#include <driverlib/interrupt.h>
+#include <driverlib/sysctl.h>
+#include <driverlib/gpio.h>
+#include <driverlib/i2c.h>
+#include <driverlib/ssi.h>
+#include <driverlib/pin_map.h>
+#include <driverlib/rom.h>
+#include <driverlib/sysctl.h>
+#include <driverlib/uart.h>
+#include <utils/uartstdio.h>
 
 // FreeRTOS includes
 #include "FreeRTOS.h"
+#include "priorities.h"
 #include "task.h"
 #include "queue.h"
 #include "semphr.h"
@@ -37,8 +40,6 @@
 // Tasks
 #include "spi_task.h"
 #include "sensor_task.h"
-
-#include "uDMA.h"
 
 
 
@@ -290,20 +291,6 @@ union spiMessageIn_u {
 typedef union spiMessageIn_u spiMessageIn_t;
 
 spiMessageIn_t spiMessageIn;
-
-
-// -----------------------------------------------------------------------------
-// Filtering of capacitance
-
-typedef struct {
-
-  /* Keep track of the current capacitance and the previous value */
-  float c;
-  float cprev;
-
-} capFilter_t;
-
-capFilter_t filter[MAX_SENSORS];
 
 
 // -----------------------------------------------------------------------------
@@ -622,17 +609,14 @@ uint16_t I2CReceive2(uint32_t slave_addr, uint8_t reg) {
 int main(void) {
     //uint32_t temphum = 0;
 
-    // Set the clocking to run at 50 MHz from the PLL.
-    //ROM_SysCtlClockSet(SYSCTL_SYSDIV_4 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ | SYSCTL_OSC_MAIN);
+    /* Set the clocking to run at 80 MHz from the PLL */
     ROM_SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ | SYSCTL_OSC_MAIN);
 
-
-    // Initialize the UART and configure it for 115,200, 8-N-1 operation.
+    /* Initialize the UART and configure it for 115,200, 8-N-1 operation */
     ConfigureUART();
 
-    // Initialize the I2C busses (6 of them)
+    /* Initialize the I2C busses (6 of them) */
     InitI2C0();
-
 
     SysCtlPeripheralClockGating(true);
 
@@ -713,15 +697,10 @@ int main(void) {
     /* All tasks are primed, enable interrupts */
     IntMasterEnable();
 
-
-
-
-    // Start the scheduler.  This should not return.
+    /* Start the scheduler.  This should not return. */
     vTaskStartScheduler();
 
-    // In case the scheduler returns for some reason, print an error and loop
-    // forever.
-
+    /* In case the scheduler returns for some reason, print an error and loop forever */
     while(1) {
     }
 }

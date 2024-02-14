@@ -12,5 +12,6 @@ extern void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxB
 extern void SSI0Interrupt(void);
 extern void SSI0SendMessage(void);
 extern void InitSPITransfer(void);
+extern void uDMAErrorHandler(void);
 
 #endif /* SSI0_H_ */
