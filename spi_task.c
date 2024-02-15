@@ -99,9 +99,6 @@ uint32_t SPI_Task_Init(void) {
         rx_buffer[i] = 0x11;
     }
 
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
-    SysCtlPeripheralSleepEnable(SYSCTL_PERIPH_UDMA);
-
     /* Init the SSI0 device for DMA usage */
     SSI0Init(&SSI0received, &SSI0sent, rx_buffer, tx_buffer, SPI_MAX_BUFFER);
 

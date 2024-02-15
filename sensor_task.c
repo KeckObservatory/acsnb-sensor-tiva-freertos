@@ -23,6 +23,7 @@ static void Sensor_Task(void *pvParameters) {
 
     portTickType ui32WakeTime;
     uint32_t sensorTaskDelay;
+    int32_t heartbeatTimer;
 
     sensorTaskDelay = 250;
     bool toggle;
@@ -30,17 +31,29 @@ static void Sensor_Task(void *pvParameters) {
     // Get the current tick count.
     ui32WakeTime = xTaskGetTickCount();
 
+    // Count down 500ms for each heartbeat LED change.  Tick rate is 1KHz, which is 1ms per tick.
+    heartbeatTimer = 500;
+
     // Loop forever.
     while (1) {
 
-        if (toggle) {
-            GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3); // on
-        } else {
-            GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0); // off
+        /* This will be invoked once per millisecond */
+        heartbeatTimer--;
+
+        if (heartbeatTimer < 0) {
+
+            if (toggle) {
+                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_PIN_0); // on
+                GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_0, GPIO_PIN_0); // on
+            } else {
+                GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0, 0); // off
+                GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_0, 0); // off
+            }
+
+            toggle = !toggle;
+
+            heartbeatTimer = 500;
         }
-
-        toggle = !toggle;
-
 
         // Wait for the required amount of time.
         vTaskDelayUntil(&ui32WakeTime, sensorTaskDelay / portTICK_RATE_MS);

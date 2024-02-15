@@ -28,6 +28,8 @@
 
 #include "SSI0.h"
 
+/* Function prototypes */
+void SSI0SlaveSelectIntHandler(void);
 
 /* Variables and pointers used */
 static uint8_t *SSI0_RxPointer;
@@ -50,11 +52,14 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
     *dataSent = false;
     dataLength = length;
 
-    /* Enable the SSI0 Peripheral */
+    /* Enable the uDMA and SSI0 peripherals */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
+    SysCtlPeripheralSleepEnable(SYSCTL_PERIPH_UDMA);
+
     SysCtlPeripheralEnable(SYSCTL_PERIPH_SSI0);
     SysCtlPeripheralSleepEnable(SYSCTL_PERIPH_SSI0);
 
-    /* Configure GPIO Pins for SSI0 mode */
+    /* Configure GPIO Pins for SSI0 slave mode */
     GPIOPinConfigure(GPIO_PA2_SSI0CLK);
     GPIOPinConfigure(GPIO_PA3_SSI0FSS);
     GPIOPinConfigure(GPIO_PA4_SSI0RX);
@@ -64,10 +69,52 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
     /* Configure SSI clock to run at 5MHz */
     SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
 
+    /* Configure the SSI to interrupt on receive timeout or overrun */
+    //SSIIntEnable(SSI0_BASE, SSI_RXTO);
+    //SSIIntEnable(SSI0_BASE, SSI_RXOR);
+
+
+    GPIOIntRegister(GPIO_PORTA_BASE, SSI0SlaveSelectIntHandler);
+    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_RISING_EDGE);
+    GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_3);
+
+
+    /* Turn on the SSI0 */
     SSIEnable(SSI0_BASE);
 
     /* Clear SSI0 RX Buffer */
     while (SSIDataGetNonBlocking(SSI0_BASE, &trashBin[0])) {}
+}
+
+void SSI0SlaveSelectIntHandler(void) {
+
+    /* Clear the interrupt that signaled the end of chip select to this device */
+    GPIOIntClear(GPIO_PORTA_BASE, GPIO_PIN_3);
+
+    /* There might be bytes left over in the transmit FIFO, we cannot let them be sent!
+     * Therefore we must reset the SSI0 device */
+    SSIDisable(SSI0_BASE);
+    SysCtlPeripheralReset(SYSCTL_PERIPH_SSI0);
+    SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
+    SSIEnable(SSI0_BASE);
+
+    /* SSI0 is fully reset.  Drive a new DMA transfer of the buffer */
+    uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
+                               UDMA_MODE_BASIC,
+                               (void *)(SSI0_BASE + SSI_O_DR),
+                               SSI0_RxPointer,
+                               dataLength);
+    uDMAChannelEnable(UDMA_CHANNEL_SSI0RX);
+
+    uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
+                               UDMA_MODE_BASIC,
+                               SSI0_TxPointer,
+                               (void *)(SSI0_BASE + SSI_O_DR),
+                               dataLength);
+    uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
+
+    /* Enable the DMA transfer */
+    SSIDMAEnable(SSI0_BASE, SSI_DMA_RX | SSI_DMA_TX);
 }
 
 
@@ -75,12 +122,18 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
 void SSI0IntHandler(void) {
 
     uint32_t ui32Status;
-    uint32_t ui32Mode;
+    //uint32_t ui32Mode;
 
+    /* Get the masked interrupt status */
     ui32Status = SSIIntStatus(SSI0_BASE, 1);
 
+    /* Clear all the interrupts */
     SSIIntClear(SSI0_BASE, ui32Status);
 
+    /* Block below is commented out for now.  This part is done in the
+     * interrupt handler for the chip select.  Regardless of whether the DMA
+     * is done or not, we are going to re-start it! */
+#ifdef ZERO
     ui32Mode = uDMAChannelModeGet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT);
 
     if (ui32Mode == UDMA_MODE_STOP) {
@@ -104,6 +157,8 @@ void SSI0IntHandler(void) {
 
         uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
     }
+#endif
+
 }
 
 
@@ -119,9 +174,7 @@ void InitSPITransfer(void) {
     /* Put the attributes in a known state for the uDMA SSI0RX channel.  These
        should already be disabled by default. */
     uDMAChannelAttributeDisable(UDMA_CHANNEL_SSI0RX,
-                                UDMA_ATTR_USEBURST | UDMA_ATTR_ALTSELECT |
-                                (UDMA_ATTR_HIGH_PRIORITY |
-                                UDMA_ATTR_REQMASK));
+            UDMA_ATTR_USEBURST | UDMA_ATTR_ALTSELECT | (UDMA_ATTR_HIGH_PRIORITY | UDMA_ATTR_REQMASK));
 
     /* Configure the control parameters for the primary control structure for
        the SSIORX channel. */
@@ -135,7 +188,6 @@ void InitSPITransfer(void) {
                            (void *)(SSI0_BASE + SSI_O_DR),
                            SSI0_RxPointer,
                            dataLength);
-
 
     //****************************************************************************
     // uDMA SSI0 TX

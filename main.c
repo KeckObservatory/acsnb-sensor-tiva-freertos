@@ -678,19 +678,29 @@ int main(void) {
     */
 
 
-
     // Enable the GPIO port that is used for the on-board LED.
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
-    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF))
-    {
-    }
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {}
 
     // Enable the GPIO pin for the LED (PF3).  Set the direction as output, and
     // enable the GPIO pin for digital function.
-    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_3);
+    GPIOPinTypeGPIOOutput(GPIO_PORTF_BASE, GPIO_PIN_0);
+    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0); // off
 
-    GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, GPIO_PIN_3); // on
-    //GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_3, 0x0); // off
+
+
+    // Enable the GPIO port that is used for the on-board LED.
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    while(!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD)) {}
+
+    // Enable the GPIO pin for the LED (PD0).  Set the direction as output, and
+    // enable the GPIO pin for digital function.
+    GPIOPinTypeGPIOOutput(GPIO_PORTD_BASE, GPIO_PIN_0);
+
+    GPIOPinWrite(GPIO_PORTD_BASE, GPIO_PIN_3, GPIO_PIN_3); // on
+
+
+
 
 
 
