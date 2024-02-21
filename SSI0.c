@@ -8,37 +8,19 @@
  *
  */
 
-#include <stdarg.h>
-#include <stdbool.h>
-#include <stdint.h>
-#include <stdio.h>
-
-#include <inc/tm4c123gh6pm.h>
-#include <inc/hw_memmap.h>
-#include <inc/hw_types.h>
-#include <inc/hw_gpio.h>
-#include <inc/hw_ssi.h>
-
-#include <driverlib/ssi.h>
-#include <driverlib/gpio.h>
-#include <driverlib/pin_map.h>
-#include <driverlib/sysctl.h>
-#include <driverlib/interrupt.h>
-#include <driverlib/udma.h>
-
-#include "SSI0.h"
-
-/* Function prototypes */
-void SSI0SlaveSelectIntHandler(void);
+#define SSI0_C_
+#include "includes.h"
 
 /* Variables and pointers used */
 static uint8_t *SSI0_RxPointer;
 static uint8_t *SSI0_TxPointer;
-static bool *dataReceived;
-static bool *dataSent;
+
 static uint16_t dataLength;
 
-void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[], uint16_t length) {
+/* -----------------------------------------------------------------------------
+ * Initialize the SSI0 device.
+ */
+void SSI0Init(uint8_t RxBuffer[], uint8_t TxBuffer[], uint16_t length) {
 
     uint32_t trashBin[1] = {0};
 
@@ -46,10 +28,6 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
     SSI0_RxPointer = &RxBuffer[0];
     SSI0_TxPointer = &TxBuffer[0];
 
-    dataReceived = received;
-    *dataReceived = false;
-    dataSent = sent;
-    *dataSent = false;
     dataLength = length;
 
     /* Enable the uDMA and SSI0 peripherals */
@@ -69,15 +47,11 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
     /* Configure SSI clock to run at 5MHz */
     SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
 
-    /* Configure the SSI to interrupt on receive timeout or overrun */
-    //SSIIntEnable(SSI0_BASE, SSI_RXTO);
-    //SSIIntEnable(SSI0_BASE, SSI_RXOR);
-
-
+    /* Connect an interrupt handler to the chip select pin.  This will be used to drive
+     * the next transaction. */
     GPIOIntRegister(GPIO_PORTA_BASE, SSI0SlaveSelectIntHandler);
     GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_RISING_EDGE);
     GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_3);
-
 
     /* Turn on the SSI0 */
     SSIEnable(SSI0_BASE);
@@ -86,6 +60,9 @@ void SSI0Init(bool *received, bool *sent, uint8_t RxBuffer[], uint8_t TxBuffer[]
     while (SSIDataGetNonBlocking(SSI0_BASE, &trashBin[0])) {}
 }
 
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for the SSI0 chip select rising edge (when it's deasserted)
+ */
 void SSI0SlaveSelectIntHandler(void) {
 
     /* Clear the interrupt that signaled the end of chip select to this device */
@@ -115,10 +92,15 @@ void SSI0SlaveSelectIntHandler(void) {
 
     /* Enable the DMA transfer */
     SSIDMAEnable(SSI0_BASE, SSI_DMA_RX | SSI_DMA_TX);
+
+    /* Set the flag that the message has been received */
+    rxMessageReady = true;
 }
 
 
-/* Interrupt handler for uDMA/SSI */
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for uDMA/SSI
+ */
 void SSI0IntHandler(void) {
 
     uint32_t ui32Status;
@@ -162,7 +144,10 @@ void SSI0IntHandler(void) {
 }
 
 
-void InitSPITransfer(void) {
+/* -----------------------------------------------------------------------------
+ *
+ */
+void SSI0InitTransfer(void) {
 
     /* Enable the uDMA interface for both TX and RX channels */
     SSIDMAEnable(SSI0_BASE, SSI_DMA_RX | SSI_DMA_TX);
@@ -233,9 +218,11 @@ void InitSPITransfer(void) {
     IntEnable(INT_SSI0);
 }
 
-/* The interrupt handler for uDMA errors. This interrupt will occur if the
-   uDMA encounters a bus error while trying to perform a transfer. This
-   handler just increments a counter if an error occurs. */
+/* -----------------------------------------------------------------------------
+ * The interrupt handler for uDMA errors. This interrupt will occur if the
+ * uDMA encounters a bus error while trying to perform a transfer. This
+ * handler just increments a counter if an error occurs.
+ */
 void uDMAErrorHandler(void) {
 
     if (uDMAErrorStatusGet()) {
