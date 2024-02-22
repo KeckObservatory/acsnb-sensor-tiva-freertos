@@ -122,7 +122,6 @@ int main(void) {
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
     while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG)) {}
 
-
     // Create the sensor task.
     if(Sensor_Task_Init() != 0) {
         while(1) {

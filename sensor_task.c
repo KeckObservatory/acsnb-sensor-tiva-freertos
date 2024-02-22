@@ -40,17 +40,67 @@ swRelayPositions switchNew3 = swNewACS;
 swRelayPositions switchNew4 = swNewACS;
 swRelayPositions switchNew5 = swNewACS;
 
-// Interrupt flags, one for each sensor
-bool intflag0 = false;
-bool intflag1 = false;
-bool intflag2 = false;
-bool intflag3 = false;
-bool intflag4 = false;
-bool intflag5 = false;
-
 int currentSwitchPosition = PCA9536_OUT_PORT_NEW_ACS;
 
 
+/* -----------------------------------------------------------------------------
+ * Initialize sensor port 1: I2C module 0 (SDA0, SCL0) and RDY_1_OUT on PA7
+ */
+void I2CInit(sensor_name_t sensor) {
+
+    uint32_t peripheral = sensor_io[sensor].peripheral;
+    uint32_t periph_base = sensor_io[sensor].periph_base;
+    uint32_t port_base = sensor_io[sensor].port_base;
+    uint32_t scl = sensor_io[sensor].scl;
+    uint32_t scl_pin = sensor_io[sensor].scl_pin;
+    uint32_t sda = sensor_io[sensor].sda;
+    uint32_t sda_pin = sensor_io[sensor].sda_pin;
+    uint32_t rdy_port = sensor_io[sensor].rdy_port;
+    uint32_t rdy_pin = sensor_io[sensor].rdy_pin;
+    isrFunc isr = sensor_io[sensor].isr;
+    bool *isr_flag = sensor_io[sensor].isr_flag;
+
+    /* Enable the I2C peripheral */
+    SysCtlPeripheralEnable(peripheral);
+    while (!SysCtlPeripheralReady(peripheral)) {}
+
+    /* Reset peripheral */
+    SysCtlPeripheralReset(peripheral);
+
+    /* Configure the pin muxing for I2C0 functions on port B2 and B3. */
+    GPIOPinConfigure(scl);
+    GPIOPinConfigure(sda);
+
+    /* Select the I2C function for these pins. */
+    GPIOPinTypeI2CSCL(port_base, scl_pin);
+    GPIOPinTypeI2C(port_base, sda_pin);
+
+    /*
+     * Enable and initialize the I2C0 master module.  Use the system clock for
+     * the I2C0 module.  The last parameter sets the I2C data transfer rate.
+     * If false the data rate is set to 100kbps and if true the data rate will
+     * be set to 400kbps.
+     */
+    I2CMasterInitExpClk(periph_base, SysCtlClockGet(), false);
+
+    /* Clear I2C FIFOs */
+    HWREG(periph_base + I2C_O_FIFOCTL) = 80008000;
+
+    /* Connect an interrupt handler to the ready select pin. */
+    GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
+    GPIOIntRegister(rdy_port, isr);
+
+    /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
+     * conversion on enabled channel(s) has been finished and the new data is available.
+     */
+    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_FALLING_EDGE);
+    GPIOIntEnable(rdy_port, rdy_pin);
+
+    /* Clear the ready flag for the device */
+    *isr_flag = false;
+}
+
+#ifdef ZERO
 /* -----------------------------------------------------------------------------
  * Initialize sensor port 1: I2C module 0 (SDA0, SCL0) and RDY_1_OUT on PA7
  */
@@ -92,23 +142,101 @@ void Sensor1Init(void) {
     GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_FALLING_EDGE);
     GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_7);
 }
+#endif
 
 /* -----------------------------------------------------------------------------
  * Interrupt handler for sensor 1 conversion ready signal.
  */
 void Sensor1Ready(void) {
 
+    uint32_t rdy_port = sensor_io[SENSOR1].rdy_port;
+    uint32_t rdy_pin = sensor_io[SENSOR1].rdy_pin;
+    bool *isr_flag = sensor_io[SENSOR1].isr_flag;
+
     /* Clear the interrupt */
-    GPIOIntClear(GPIO_PORTA_BASE, GPIO_PIN_7);
+    GPIOIntClear(rdy_port, rdy_pin);
 
     /* Set the flag that the conversion is complete */
-    sensor1_ready = true;
+    *isr_flag = true;
 }
 
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for sensor 2 conversion ready signal.
+ */
+void Sensor2Ready(void) {
+    uint32_t rdy_port = sensor_io[SENSOR2].rdy_port;
+    uint32_t rdy_pin = sensor_io[SENSOR2].rdy_pin;
+    bool *isr_flag = sensor_io[SENSOR2].isr_flag;
 
+    /* Clear the interrupt */
+    GPIOIntClear(rdy_port, rdy_pin);
+
+    /* Set the flag that the conversion is complete */
+    *isr_flag = true;
+}
 
 /* -----------------------------------------------------------------------------
- *
+ * Interrupt handler for sensor 3 conversion ready signal.
+ */
+void Sensor3Ready(void) {
+    uint32_t rdy_port = sensor_io[SENSOR3].rdy_port;
+    uint32_t rdy_pin = sensor_io[SENSOR3].rdy_pin;
+    bool *isr_flag = sensor_io[SENSOR3].isr_flag;
+
+    /* Clear the interrupt */
+    GPIOIntClear(rdy_port, rdy_pin);
+
+    /* Set the flag that the conversion is complete */
+    *isr_flag = true;
+}
+
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for sensor 4 conversion ready signal.
+ */
+void Sensor4Ready(void) {
+    uint32_t rdy_port = sensor_io[SENSOR4].rdy_port;
+    uint32_t rdy_pin = sensor_io[SENSOR4].rdy_pin;
+    bool *isr_flag = sensor_io[SENSOR4].isr_flag;
+
+    /* Clear the interrupt */
+    GPIOIntClear(rdy_port, rdy_pin);
+
+    /* Set the flag that the conversion is complete */
+    *isr_flag = true;
+}
+
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for sensor 5 conversion ready signal.
+ */
+void Sensor5Ready(void) {
+    uint32_t rdy_port = sensor_io[SENSOR5].rdy_port;
+    uint32_t rdy_pin = sensor_io[SENSOR5].rdy_pin;
+    bool *isr_flag = sensor_io[SENSOR5].isr_flag;
+
+    /* Clear the interrupt */
+    GPIOIntClear(rdy_port, rdy_pin);
+
+    /* Set the flag that the conversion is complete */
+    *isr_flag = true;
+}
+
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for sensor 6 conversion ready signal.
+ */
+void Sensor6Ready(void) {
+    uint32_t rdy_port = sensor_io[SENSOR6].rdy_port;
+    uint32_t rdy_pin = sensor_io[SENSOR6].rdy_pin;
+    bool *isr_flag = sensor_io[SENSOR6].isr_flag;
+
+    /* Clear the interrupt */
+    GPIOIntClear(rdy_port, rdy_pin);
+
+    /* Set the flag that the conversion is complete */
+    *isr_flag = true;
+}
+
+/* -----------------------------------------------------------------------------
+ * Send a number of bytes to an I2C address.
  */
 void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
 
@@ -178,7 +306,7 @@ void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
 }
 
 /* -----------------------------------------------------------------------------
- *
+ * Receive one byte from an I2C interface.
  */
 uint8_t I2CReceive1(uint32_t slave_addr, uint8_t reg) {
 
@@ -208,7 +336,7 @@ uint8_t I2CReceive1(uint32_t slave_addr, uint8_t reg) {
 }
 
 /* -----------------------------------------------------------------------------
- *
+ * Receive two bytes from an I2C interface.
  */
 uint16_t I2CReceive2(uint32_t slave_addr, uint8_t reg) {
 
@@ -301,8 +429,6 @@ static void Sensor_Task(void *pvParameters) {
         //temphum = I2CReceive(0x40, 0xE3);
         //UARTprintf("temphum = %d\n", temphum);
 
-
-
         // Wait for the required amount of time.
         vTaskDelayUntil(&ui32WakeTime, sensorTaskDelay / portTICK_RATE_MS);
     }
@@ -314,25 +440,12 @@ static void Sensor_Task(void *pvParameters) {
 uint32_t Sensor_Task_Init(void) {
 
     /* Initialize the I2C busses (6 of them) */
-    Sensor1Init();
-
-    /*
-     * The interrupts that indicate sensor conversion is complete come in on GPIO lines.
-     * RDY_1_OUT on PA7
-     * RDY_2_OUT on PB5
-     * RDY_3_OUT on PC4
-     * RDY_4_OUT on PD7
-     * RDY_5_OUT on PE0
-     * RDY_6_OUT on PF4
-     *
-     *
-     *
-     *
-     *
-     */
-
-
-
+    I2CInit(SENSOR1);
+    I2CInit(SENSOR2);
+    I2CInit(SENSOR3);
+    I2CInit(SENSOR4);
+    I2CInit(SENSOR5);
+    I2CInit(SENSOR6);
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {

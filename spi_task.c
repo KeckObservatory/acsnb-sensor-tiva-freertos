@@ -36,15 +36,12 @@ static void SPI_Task(void *pvParameters) {
 
         }
 
+        if (rxMessageReady) {
 
-#ifdef zero
-        if (SSI0received == true) {
-
-            SSI0received = false;
-            SSI0sent = false;
+            rxMessageReady = false;
+            //SSI0sent = false;
             //SSI0SendMessage();
         }
-#endif
 
         // Wait for the required amount of time.
         vTaskDelayUntil(&ui32WakeTime, spiTaskDelay / portTICK_RATE_MS);
