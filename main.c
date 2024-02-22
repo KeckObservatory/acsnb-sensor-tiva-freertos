@@ -38,10 +38,12 @@ void vApplicationStackOverflowHook(xTaskHandle *pxTask, char *pcTaskName) {
  */
 void ConfigureUART(void) {
 
+#ifdef VIRTUAL_UART_SUPPORT
+
     // Enable the GPIO Peripheral used by the UART.
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
-    // Enable UART0
+    // Enable UART01
     ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
 
     // Configure GPIO Pins for UART mode.
@@ -54,6 +56,8 @@ void ConfigureUART(void) {
 
     // Initialize the UART for console I/O.
     UARTStdioConfig(0, 115200, 16000000);
+
+#endif
 }
 
 
@@ -62,6 +66,8 @@ void ConfigureUART(void) {
  * to safely control access to the port.
  */
 void v_printf(const char *pcString, ...) {
+
+#ifdef VIRTUAL_UART_SUPPORT
     va_list vaArgP;
 
     /* Take the semaphore but do not wait forever */
@@ -77,13 +83,14 @@ void v_printf(const char *pcString, ...) {
 
     /* Release the semaphore */
     xSemaphoreGive(g_pUARTSemaphore);
+#endif
+
 }
 
 /* -----------------------------------------------------------------------------
  * Initialize FreeRTOS and start the initial set of tasks.
  */
 int main(void) {
-    //uint32_t temphum = 0;
 
     /* Set the clocking to run at 80 MHz from the PLL */
     ROM_SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ | SYSCTL_OSC_MAIN);
@@ -96,14 +103,24 @@ int main(void) {
     ConfigureUART();
     v_printf("\n\nACS Node Box sensor module started.\n");
 
-    /* Initialize the I2C busses (6 of them) */
-    InitI2C0();
+    // TBD - this code never sleeps so this call is moot
+    //SysCtlPeripheralClockGating(true);
 
-    SysCtlPeripheralClockGating(true);
-
-
-    //temphum = I2CReceive(0x40, 0xE3);
-    //UARTprintf("temphum = %d\n", temphum);
+    /* Init all the GPIO peripherals here so the tasks don't have to duplicate this code */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG)) {}
 
 
     // Create the sensor task.

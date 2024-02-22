@@ -61,7 +61,7 @@ void SSI0Init(uint8_t RxBuffer[], uint8_t TxBuffer[], uint16_t length) {
 }
 
 /* -----------------------------------------------------------------------------
- * Interrupt handler for the SSI0 chip select rising edge (when it's deasserted)
+ * Interrupt handler for the SSI0 chip select rising edge (when it's de-asserted)
  */
 void SSI0SlaveSelectIntHandler(void) {
 

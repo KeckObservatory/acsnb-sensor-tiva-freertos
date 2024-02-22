@@ -216,6 +216,54 @@ typedef struct {
 } taskParams;
 
 
+EXTERN bool sensor1_ready;
+EXTERN bool sensor2_ready;
+EXTERN bool sensor3_ready;
+EXTERN bool sensor4_ready;
+EXTERN bool sensor5_ready;
+EXTERN bool sensor6_ready;
+
+
+/* Name the sensors.
+ * Note that sensors are named 1 to 6 and are indexed from 0.
+ */
+typedef enum {
+    SENSOR1 = 0,
+    SENSOR2,
+    SENSOR3,
+    SENSOR4,
+    SENSOR5,
+    SENSOR6
+} sensor_name_t;
+
+typedef struct {
+    uint32_t base;
+    uint32_t scl;
+    uint32_t scl_pin;
+    uint32_t sda;
+    uint32_t sda_pin;
+} sensor_io_t;
+
+/* Define this structure only for use with sensor_task.c, because it is
+ * initialized here.  The EXTERN mechanism does not work for initialized
+ * values. */
+#ifdef SENSOR_TASK_C_
+sensor_io_t sensor_io[6] = {
+        [SENSOR1].base = SYSCTL_PERIPH_I2C0,
+        [SENSOR1].scl = GPIO_PB2_I2C0SCL,
+        [SENSOR1].scl_pin = GPIO_PIN_2,
+        [SENSOR1].sda = GPIO_PB3_I2C0SDA,
+        [SENSOR1].sda_pin = GPIO_PIN_3,
+
+        [SENSOR2].base = SYSCTL_PERIPH_I2C1,
+        [SENSOR2].scl = GPIO_PG4_I2C1SCL,
+        [SENSOR2].sda = GPIO_PG5_I2C1SDA,
+
+        [SENSOR3].base = SYSCTL_PERIPH_I2C2,
+        [SENSOR3].scl = GPIO_PE4_I2C2SCL,
+        [SENSOR3].sda = GPIO_PE5_I2C2SDA,
+};
+#endif
 
 
 /* -----------------------------------------------------------------------------
@@ -223,7 +271,20 @@ typedef struct {
  * -----------------------------------------------------------------------------
  */
 EXTERN uint32_t Sensor_Task_Init(void);
-EXTERN void InitI2C0(void);
+
+EXTERN void Sensor1Init(void);
+EXTERN void Sensor2Init(void);
+EXTERN void Sensor3Init(void);
+EXTERN void Sensor4Init(void);
+EXTERN void Sensor5Init(void);
+EXTERN void Sensor6Init(void);
+
+EXTERN void Sensor1Ready(void);
+EXTERN void Sensor2Ready(void);
+EXTERN void Sensor3Ready(void);
+EXTERN void Sensor4Ready(void);
+EXTERN void Sensor5Ready(void);
+EXTERN void Sensor6Ready(void);
 
 #undef EXTERN
 

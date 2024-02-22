@@ -51,35 +51,61 @@ bool intflag5 = false;
 int currentSwitchPosition = PCA9536_OUT_PORT_NEW_ACS;
 
 
-void InitI2C0(void) {
-    // Initialize I2C module 0
+/* -----------------------------------------------------------------------------
+ * Initialize sensor port 1: I2C module 0 (SDA0, SCL0) and RDY_1_OUT on PA7
+ */
+void Sensor1Init(void) {
 
-    // Enable I2C module 0
+    /* Enable I2C module 0. */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_I2C0)) {}
 
-    // Reset module
+    /* Reset module */
     SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
 
-    // Enable GPIO peripheral that contains I2C 0
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
-
-    // Configure the pin muxing for I2C0 functions on port B2 and B3.
+    /* Configure the pin muxing for I2C0 functions on port B2 and B3. */
     GPIOPinConfigure(GPIO_PB2_I2C0SCL);
     GPIOPinConfigure(GPIO_PB3_I2C0SDA);
 
-    // Select the I2C function for these pins.
+    /* Select the I2C function for these pins. */
     GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
     GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
 
-    // Enable and initialize the I2C0 master module.  Use the system clock for
-    // the I2C0 module.  The last parameter sets the I2C data transfer rate.
-    // If false the data rate is set to 100kbps and if true the data rate will
-    // be set to 400kbps.
+    /*
+     * Enable and initialize the I2C0 master module.  Use the system clock for
+     * the I2C0 module.  The last parameter sets the I2C data transfer rate.
+     * If false the data rate is set to 100kbps and if true the data rate will
+     * be set to 400kbps.
+     */
     I2CMasterInitExpClk(I2C0_BASE, SysCtlClockGet(), false);
 
-    // Clear I2C FIFOs
+    /* Clear I2C FIFOs */
     HWREG(I2C0_BASE + I2C_O_FIFOCTL) = 80008000;
+
+    /* Connect an interrupt handler to the ready select pin. */
+    GPIOPinTypeGPIOInput(GPIO_PORTA_BASE, GPIO_PIN_7);
+    GPIOIntRegister(GPIO_PORTA_BASE, Sensor1Ready);
+
+    /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
+     * conversion on enabled channel(s) has been finished and the new data is available.
+     */
+    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_FALLING_EDGE);
+    GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_7);
 }
+
+/* -----------------------------------------------------------------------------
+ * Interrupt handler for sensor 1 conversion ready signal.
+ */
+void Sensor1Ready(void) {
+
+    /* Clear the interrupt */
+    GPIOIntClear(GPIO_PORTA_BASE, GPIO_PIN_7);
+
+    /* Set the flag that the conversion is complete */
+    sensor1_ready = true;
+}
+
+
 
 /* -----------------------------------------------------------------------------
  *
@@ -239,18 +265,13 @@ static void Sensor_Task(void *pvParameters) {
     sensorTaskDelay = 250;
     bool toggle;
 
+    //uint32_t temphum = 0;
+
     // Get the current tick count.
     ui32WakeTime = xTaskGetTickCount();
 
     // Count down 500ms for each heartbeat LED change.  Tick rate is 1KHz, which is 1ms per tick.
     heartbeatTimer = 500;
-
-    // UART semaphore example
-    //xSemaphoreTake(g_pUARTSemaphore, portMAX_DELAY);
-    //UARTprintf("Led blinking frequency is %d ms.\n", (ui32LEDToggleDelay * 2));
-    //xSemaphoreGive(g_pUARTSemaphore);
-
-
 
     // Loop forever.
     while (1) {
@@ -275,6 +296,13 @@ static void Sensor_Task(void *pvParameters) {
             v_printf("heartbeat\n");
         }
 
+
+
+        //temphum = I2CReceive(0x40, 0xE3);
+        //UARTprintf("temphum = %d\n", temphum);
+
+
+
         // Wait for the required amount of time.
         vTaskDelayUntil(&ui32WakeTime, sensorTaskDelay / portTICK_RATE_MS);
     }
@@ -285,41 +313,24 @@ static void Sensor_Task(void *pvParameters) {
  */
 uint32_t Sensor_Task_Init(void) {
 
-
-
-
+    /* Initialize the I2C busses (6 of them) */
+    Sensor1Init();
 
     /*
-    // Init Interrupt sensor 0
-    GPIO_disableInt(Board_PININ0);
-    GPIO_clearInt(Board_PININ0);1
-    GPIO_setCallback(Board_PININ0, sens0cvtDoneItr);
+     * The interrupts that indicate sensor conversion is complete come in on GPIO lines.
+     * RDY_1_OUT on PA7
+     * RDY_2_OUT on PB5
+     * RDY_3_OUT on PC4
+     * RDY_4_OUT on PD7
+     * RDY_5_OUT on PE0
+     * RDY_6_OUT on PF4
+     *
+     *
+     *
+     *
+     *
+     */
 
-    // Init Interrupt sensor 1
-    GPIO_disableInt(Board_PININ1);
-    GPIO_clearInt(Board_PININ1);
-    GPIO_setCallback(Board_PININ1, sens1cvtDoneItr);
-
-    // Init Interrupt sensor 2
-    GPIO_disableInt(Board_PININ2);
-    GPIO_clearInt(Board_PININ2);
-    GPIO_setCallback(Board_PININ2, sens2cvtDoneItr);
-
-    // Init Interrupt sensor 3
-    GPIO_disableInt(Board_PININ3);
-    GPIO_clearInt(Board_PININ3);
-    GPIO_setCallback(Board_PININ3, sens3cvtDoneItr);
-
-    // Init Interrupt sensor 4
-    GPIO_disableInt(Board_PININ4);
-    GPIO_clearInt(Board_PININ4);
-    GPIO_setCallback(Board_PININ4, sens4cvtDoneItr);
-
-    // Init Interrupt sensor 5
-    GPIO_disableInt(Board_PININ5);
-    GPIO_clearInt(Board_PININ5);
-    GPIO_setCallback(Board_PININ5, sens5cvtDoneItr);
-    */
 
 
 

@@ -11,6 +11,10 @@
 #ifndef INCLUDES_H_
 #define INCLUDES_H_
 
+// Feature switches
+#undef VIRTUAL_UART_SUPPORT   // define this to 1 if supported
+
+
 #include <stdarg.h>
 #include <stdbool.h>
 #include <stdint.h>
