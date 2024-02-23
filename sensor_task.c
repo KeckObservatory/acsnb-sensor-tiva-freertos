@@ -83,9 +83,16 @@ void I2CInit(sensor_name_t sensor) {
      */
     I2CMasterInitExpClk(periph_base, SysCtlClockGet(), false);
 
+    /* TBD Add a glitch filter */
+    //I2CMasterGlitchFilterConfigSet(periph_base, I2C_MASTER_GLITCH_FILTER_32);
+
+    I2CMasterTimeoutSet(periph_base, 0xFF);
+
     /* Clear I2C FIFOs */
     HWREG(periph_base + I2C_O_FIFOCTL) = 80008000;
 
+
+#ifdef z
     /* Connect an interrupt handler to the ready select pin. */
     GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
     GPIOIntRegister(rdy_port, isr);
@@ -95,6 +102,7 @@ void I2CInit(sensor_name_t sensor) {
      */
     GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_FALLING_EDGE);
     GPIOIntEnable(rdy_port, rdy_pin);
+#endif
 
     /* Clear the ready flag for the device */
     *isr_flag = false;
@@ -381,6 +389,116 @@ uint16_t I2CReceive2(uint32_t slave_addr, uint8_t reg) {
 }
 
 
+
+//*****************************************************************************
+//! Indicates whether or not the I2C bus has timed out.
+//!
+//! \param ui32Base is the base address of the I2C module.
+//!
+//! This function returns an indication of whether or not the I2C bus has time
+//!  out.  The I2C Master Timeout Value must be set.
+//!
+//! \return Returns \b true if the I2C bus has timed out; otherwise, returns
+//! \b false.
+//*****************************************************************************
+bool I2CMasterTimeout(uint32_t ui32Base) {
+
+    // Return the bus timeout status
+    if (HWREG(ui32Base + I2C_O_MCS) & I2C_MCS_CLKTO) {
+        return(true);
+    } else {
+       return(false);
+    }
+}
+
+
+
+int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+
+    uint8_t i;
+    uint32_t err;
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        /*
+        if (err == I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err == I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err == I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err == I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+        */
+    }
+
+
+
+    /* Specify that we are writing (a register address) to the slave device */
+    I2CMasterSlaveAddrSet(base, slave_addr, false);
+
+    /* Specify register to be read */
+    I2CMasterDataPut(base, reg);
+
+    /* Send control byte and register address byte to slave device */
+    I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_START);
+
+    /* Wait for MCU to finish transaction */
+    while(I2CMasterBusy(base));
+
+    /* Specify that we are going to read from slave device */
+    I2CMasterSlaveAddrSet(base, slave_addr, true);
+
+    /* Send control byte and read from the register we specified */
+    I2CMasterBurstLengthSet(base, len);
+
+    for (i = 0; i < len; i++) {
+
+        if (i == 0) {
+            /* First byte starts the transaction */
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_START);
+        } else if (i == len) {
+            /* Last byte finishes the transaction */
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+        } else {
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+        }
+
+        /* Wait for MCU to finish transaction */
+        while(I2CMasterBusy(base));
+
+        /* Capture one byte */
+        buf[i] = I2CMasterDataGet(base);
+
+    }
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err == I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err == I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err == I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err == I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
+
+    return 0;
+}
+
 /* -----------------------------------------------------------------------------
  *
  */
@@ -390,16 +508,17 @@ static void Sensor_Task(void *pvParameters) {
     uint32_t sensorTaskDelay;
     int32_t heartbeatTimer;
 
-    sensorTaskDelay = 250;
+    /* Invoke task every 10ms */
+    sensorTaskDelay = 10;
     bool toggle;
 
-    //uint32_t temphum = 0;
+    uint8_t vals[6];
 
     // Get the current tick count.
     ui32WakeTime = xTaskGetTickCount();
 
-    // Count down 500ms for each heartbeat LED change.  Tick rate is 1KHz, which is 1ms per tick.
-    heartbeatTimer = 500;
+    // Count down 500ms, 10ms at a time
+    heartbeatTimer = 50;
 
     // Loop forever.
     while (1) {
@@ -408,6 +527,16 @@ static void Sensor_Task(void *pvParameters) {
         heartbeatTimer--;
 
         if (heartbeatTimer < 0) {
+
+            /*
+            I2CReceive(sensor_io[SENSOR1].periph_base, AD7746_ADDR, 0xE3, vals, 6);
+            I2CReceive(sensor_io[SENSOR2].periph_base, AD7746_ADDR, 0xE3, vals, 6);
+            I2CReceive(sensor_io[SENSOR3].periph_base, AD7746_ADDR, 0xE3, vals, 6);
+            I2CReceive(sensor_io[SENSOR4].periph_base, AD7746_ADDR, 0xE3, vals, 6);
+            I2CReceive(sensor_io[SENSOR5].periph_base, AD7746_ADDR, 0xE3, vals, 6);
+            */
+            I2CReceive(sensor_io[SENSOR6].periph_base, AD7746_ADDR, AD7746_STATUS_REG, vals, 6);
+
 
             if (toggle) {
                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_PIN_0); // on
@@ -419,15 +548,8 @@ static void Sensor_Task(void *pvParameters) {
 
             toggle = !toggle;
 
-            heartbeatTimer = 500;
-
-            v_printf("heartbeat\n");
+            heartbeatTimer = 50;
         }
-
-
-
-        //temphum = I2CReceive(0x40, 0xE3);
-        //UARTprintf("temphum = %d\n", temphum);
 
         // Wait for the required amount of time.
         vTaskDelayUntil(&ui32WakeTime, sensorTaskDelay / portTICK_RATE_MS);
