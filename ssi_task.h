@@ -1,5 +1,5 @@
 /*
- * spi_task.h - Prototypes for the SPI interface task.
+ * ssi_task.h - Prototypes for the SSI (SPI) interface task.
  *
  * Copyright (c) 2024, W. M. Keck Observatory
  * All rights reserved.
@@ -8,11 +8,11 @@
  *
  */
 
-#ifndef SPI_TASK_H_
-#define SPI_TASK_H_
+#ifndef SSI_TASK_H_
+#define SSI_TASK_H_
 
 /* Only instantiate variables if we are the .c routine for this header file. */
-#ifndef SENSOR_TASK_C_
+#ifndef SSI_TASK_C_
   #define EXTERN extern
 #else
   #define EXTERN
@@ -25,18 +25,11 @@
 #pragma DATA_ALIGN(pui8ControlTable, 1024)
 uint8_t pui8ControlTable[1024];
 
-// Firmware revision as of 2024-02-20 (PMR)
-#define FIRMWARE_REV_0 1
-#define FIRMWARE_REV_1 0
-#define FIRMWARE_REV_2 0
-
-#define MAX_SENSORS 6
-
 
 /* -----------------------------------------------------------------------------
- * SPI messaging
+ * SSI messaging
  *
- * Define a structure which represents the data going back on the SPI, contains
+ * Define a structure which represents the data going back on the SSI, contains
  * all the values of capacitance and temperature and humidity.  Packing
  * is used here to prevent any padding that might be inserted by the compiler.
  *
@@ -78,36 +71,36 @@ typedef struct {
     uint8_t size;
 
     struct {
+        // [0] Status of the sensor
+        uint8_t connected;
 
-        // Bytes 0 and 1 are the temperature
+        // [1] I2C bus fault enum value, if any
+        uint8_t i2c_bus_fault;
+
+        // [2,3] Temperature
+        uint8_t tempHigh;
+        uint8_t tempLow;
+
+        // [4,5] Humidity
         uint8_t humidityHigh;
         uint8_t humidityLow;
 
-        // Bytes 2, 3 and 4 are the differential capacitance, a 24 bit value
+        // [6,7,8] Differential capacitance, a 24 bit value
         uint8_t diffCapHigh;
         uint8_t diffCapMid;
         uint8_t diffCapLow;
 
-        // Bytes 5, 6 and 7 are the C1 cap single capacitance
+        // [9,10,11] C1 cap single capacitance
         uint8_t c1High;
         uint8_t c1Mid;
         uint8_t c1Low;
 
-        // Bytes 8, 9 and 10 are the C2 cap single capacitance
+        // [12,13,14] C2 cap single capacitance
         uint8_t c2High;
         uint8_t c2Mid;
         uint8_t c2Low;
 
-        // Byte 11, 12 and 13 are the filtered differential capacitance, a 24 bit value
-        uint8_t filtCapHigh;
-        uint8_t filtCapMid;
-        uint8_t filtCapLow;
-
-        // Bytes 14, 15 are the temperature
-        uint8_t tempHigh;
-        uint8_t tempLow;
-
-        // Bytes 16, 17, and 18 are the on-chip temperature from the capacitance sensor
+        // [15,16,17] On-chip temperature from the capacitance sensor
         uint8_t chiptempHigh;
         uint8_t chiptempMid;
         uint8_t chiptempLow;
@@ -134,10 +127,10 @@ EXTERN bool txMessageReady;
  * Function prototypes
  * -----------------------------------------------------------------------------
  */
-EXTERN void SPI_ISR(void);
-EXTERN uint32_t SPI_Task_Init(void);
+EXTERN void SSI_ISR(void);
+EXTERN uint32_t SSI_Task_Init(void);
 
 
 #undef EXTERN
 
-#endif /* SPI_TASK_H_ */
+#endif /* SSI_TASK_H_ */

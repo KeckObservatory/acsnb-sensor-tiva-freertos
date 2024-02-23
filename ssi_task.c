@@ -1,5 +1,5 @@
 /*
- * spi_task.c
+ * ssi_task.c
  *
  * Copyright (c) 2024, W. M. Keck Observatory
  * All rights reserved.
@@ -8,22 +8,25 @@
  *
  */
 
-#define SPI_TASK_C_
+#define SSI_TASK_C_
 #include "includes.h"
 
-#define SPI_TASK_STACK_SIZE     128  // Stack size in words
-#define SPI_ITEM_SIZE           sizeof(uint8_t)
-#define SPI_QUEUE_SIZE          5
+#define SSI_TASK_STACK_SIZE     128  // Stack size in words
+#define SSI_ITEM_SIZE           sizeof(uint8_t)
+#define SSI_QUEUE_SIZE          5
 
 /* -----------------------------------------------------------------------------
- * RTOS task for handling the SPI interface back to the Beaglebone.
+ * SSI RTOS task main loop.  This task handles the SSI interface back to the
+ * Beaglebone.
+ *
+ * Runs and never returns.
  */
-static void SPI_Task(void *pvParameters) {
+static void SSI_Task(void *pvParameters) {
 
     portTickType ui32WakeTime;
-    uint32_t spiTaskDelay;
+    uint32_t ssiTaskDelay;
 
-    spiTaskDelay = 10;
+    ssiTaskDelay = 10;
 
     // Get the current tick count.
     ui32WakeTime = xTaskGetTickCount();
@@ -44,14 +47,14 @@ static void SPI_Task(void *pvParameters) {
         }
 
         // Wait for the required amount of time.
-        vTaskDelayUntil(&ui32WakeTime, spiTaskDelay / portTICK_RATE_MS);
+        vTaskDelayUntil(&ui32WakeTime, ssiTaskDelay / portTICK_RATE_MS);
     }
 }
 
 /* -----------------------------------------------------------------------------
- * RTOS task initialization.
+ * SSI RTOS task initialization, runs once at startup.
  */
-uint32_t SPI_Task_Init(void) {
+uint32_t SSI_Task_Init(void) {
 
     uint8_t i;
 
@@ -82,12 +85,12 @@ uint32_t SPI_Task_Init(void) {
     /* Point at the control table to use for channel control structures */
     uDMAControlBaseSet(pui8ControlTable);
 
-    /* Initialize the uDMA SPI transfers */
+    /* Initialize the uDMA SSI transfers */
     SSI0InitTransfer();
 
     /* Create the RTOS task */
-    if (xTaskCreate(SPI_Task, (const portCHAR *)"SPI", SPI_TASK_STACK_SIZE, NULL,
-                   tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {
+    if (xTaskCreate(SSI_Task, (const portCHAR *)"SSI", SSI_TASK_STACK_SIZE, NULL,
+                   tskIDLE_PRIORITY + PRIORITY_SSI_TASK, NULL) != pdTRUE) {
         return(1);
     }
 

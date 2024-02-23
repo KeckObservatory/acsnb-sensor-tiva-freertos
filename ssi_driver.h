@@ -1,5 +1,5 @@
 /*
- * SSI0.h - Prototypes for the SSI0 interface.
+ * ssi_driver.h - Prototypes for the SSI0 interface.
  *
  * Copyright (c) 2024, W. M. Keck Observatory
  * All rights reserved.
@@ -8,11 +8,11 @@
  *
  */
 
-#ifndef SSI0_H_
-#define SSI0_H_
+#ifndef SSI_DRIVER_H_
+#define SSI_DRIVER_H_
 
 /* Only instantiate variables if we are the .c routine for this header file. */
-#ifndef SENSOR_TASK_C_
+#ifndef SSI_DRIVER_C_
   #define EXTERN extern
 #else
   #define EXTERN
@@ -32,4 +32,4 @@ EXTERN void uDMAErrorHandler(void);
 
 #undef EXTERN
 
-#endif /* SSI0_H_ */
+#endif /* SSI_DRIVER_H_ */

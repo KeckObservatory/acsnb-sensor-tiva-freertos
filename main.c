@@ -95,7 +95,7 @@ int main(void) {
     /* Set the clocking to run at 80 MHz from the PLL */
     ROM_SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ | SYSCTL_OSC_MAIN);
 
-    // Create mutexes to guard the UART and SPI messaging.
+    // Create mutexes to guard the UART and SSI messaging.
     g_pUARTSemaphore = xSemaphoreCreateMutex();
     g_txMessageSemaphore = xSemaphoreCreateMutex();
 
@@ -128,8 +128,8 @@ int main(void) {
         }
     }
 
-    // Create the SPI communication task
-    if(SPI_Task_Init() != 0) {
+    // Create the SSI communication task
+    if(SSI_Task_Init() != 0) {
         while(1) {
         }
     }

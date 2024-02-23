@@ -14,6 +14,10 @@
 // Feature switches
 #undef VIRTUAL_UART_SUPPORT   // define this to 1 if supported
 
+// Firmware revision as of 2024-02-23 (PMR)
+#define FIRMWARE_REV_0 1
+#define FIRMWARE_REV_1 1
+#define FIRMWARE_REV_2 0
 
 #include <stdarg.h>
 #include <stdbool.h>
@@ -48,11 +52,12 @@
 
 // Tasks
 #include "main.h"
-#include "spi_task.h"
 #include "sensor_task.h"
+#include "ssi_task.h"     // This must be included after sensor_task.h because it relies on enums in that file
 
 // External interfaces
-#include "SSI0.h"
+#include "sensor_driver.h"
+#include "ssi_driver.h"
 
 
 #endif /* INCLUDES_H_ */

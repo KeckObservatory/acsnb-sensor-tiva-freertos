@@ -21,6 +21,7 @@ adConversionTime adAllSensorConversionTime = DEFAULT_CONVERSION_TIME;
 // Flags to indicate whether to only get the differential cap, or get all 3 (for each sensor)
 bool adGetAllCaps[MAX_SENSORS] = { false, false, false, false, false, false };
 
+#ifdef hold
 // -----------------------------------------------------------------------------
 // Switch states
 
@@ -41,7 +42,29 @@ swRelayPositions switchNew4 = swNewACS;
 swRelayPositions switchNew5 = swNewACS;
 
 int currentSwitchPosition = PCA9536_OUT_PORT_NEW_ACS;
+#endif
 
+
+//*****************************************************************************
+//! Indicates whether or not the I2C bus has timed out.
+//!
+//! \param ui32Base is the base address of the I2C module.
+//!
+//! This function returns an indication of whether or not the I2C bus has time
+//!  out.  The I2C Master Timeout Value must be set.
+//!
+//! \return Returns \b true if the I2C bus has timed out; otherwise, returns
+//! \b false.
+//*****************************************************************************
+bool I2CMasterTimeout(uint32_t ui32Base) {
+
+    // Return the bus timeout status
+    if (HWREG(ui32Base + I2C_O_MCS) & I2C_MCS_CLKTO) {
+       return(true);
+    } else {
+       return(false);
+    }
+}
 
 /* -----------------------------------------------------------------------------
  * Initialize sensor port 1: I2C module 0 (SDA0, SCL0) and RDY_1_OUT on PA7
@@ -83,16 +106,16 @@ void I2CInit(sensor_name_t sensor) {
      */
     I2CMasterInitExpClk(periph_base, SysCtlClockGet(), false);
 
-    /* TBD Add a glitch filter */
+    /* TBD: use the glitch filter if the bus is noisy */
     //I2CMasterGlitchFilterConfigSet(periph_base, I2C_MASTER_GLITCH_FILTER_32);
 
+    /* Set a bus timeout value just in case a message is disrupted/corrupted by an
+     * unplug event.  Use the max value to avoid trying to predict how long we need. */
     I2CMasterTimeoutSet(periph_base, 0xFF);
 
     /* Clear I2C FIFOs */
     HWREG(periph_base + I2C_O_FIFOCTL) = 80008000;
 
-
-#ifdef z
     /* Connect an interrupt handler to the ready select pin. */
     GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
     GPIOIntRegister(rdy_port, isr);
@@ -102,146 +125,49 @@ void I2CInit(sensor_name_t sensor) {
      */
     GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_FALLING_EDGE);
     GPIOIntEnable(rdy_port, rdy_pin);
-#endif
 
     /* Clear the ready flag for the device */
     *isr_flag = false;
 }
-
-#ifdef ZERO
-/* -----------------------------------------------------------------------------
- * Initialize sensor port 1: I2C module 0 (SDA0, SCL0) and RDY_1_OUT on PA7
- */
-void Sensor1Init(void) {
-
-    /* Enable I2C module 0. */
-    SysCtlPeripheralEnable(SYSCTL_PERIPH_I2C0);
-    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_I2C0)) {}
-
-    /* Reset module */
-    SysCtlPeripheralReset(SYSCTL_PERIPH_I2C0);
-
-    /* Configure the pin muxing for I2C0 functions on port B2 and B3. */
-    GPIOPinConfigure(GPIO_PB2_I2C0SCL);
-    GPIOPinConfigure(GPIO_PB3_I2C0SDA);
-
-    /* Select the I2C function for these pins. */
-    GPIOPinTypeI2CSCL(GPIO_PORTB_BASE, GPIO_PIN_2);
-    GPIOPinTypeI2C(GPIO_PORTB_BASE, GPIO_PIN_3);
-
-    /*
-     * Enable and initialize the I2C0 master module.  Use the system clock for
-     * the I2C0 module.  The last parameter sets the I2C data transfer rate.
-     * If false the data rate is set to 100kbps and if true the data rate will
-     * be set to 400kbps.
-     */
-    I2CMasterInitExpClk(I2C0_BASE, SysCtlClockGet(), false);
-
-    /* Clear I2C FIFOs */
-    HWREG(I2C0_BASE + I2C_O_FIFOCTL) = 80008000;
-
-    /* Connect an interrupt handler to the ready select pin. */
-    GPIOPinTypeGPIOInput(GPIO_PORTA_BASE, GPIO_PIN_7);
-    GPIOIntRegister(GPIO_PORTA_BASE, Sensor1Ready);
-
-    /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
-     * conversion on enabled channel(s) has been finished and the new data is available.
-     */
-    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_7, GPIO_FALLING_EDGE);
-    GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_7);
-}
-#endif
 
 /* -----------------------------------------------------------------------------
  * Interrupt handler for sensor 1 conversion ready signal.
  */
 void Sensor1Ready(void) {
 
-    uint32_t rdy_port = sensor_io[SENSOR1].rdy_port;
-    uint32_t rdy_pin = sensor_io[SENSOR1].rdy_pin;
-    bool *isr_flag = sensor_io[SENSOR1].isr_flag;
-
     /* Clear the interrupt */
-    GPIOIntClear(rdy_port, rdy_pin);
+    GPIOIntClear(sensor_io[SENSOR1].rdy_port, sensor_io[SENSOR1].rdy_pin);
 
     /* Set the flag that the conversion is complete */
-    *isr_flag = true;
+    *sensor_io[SENSOR1].isr_flag = true;
 }
 
 /* -----------------------------------------------------------------------------
- * Interrupt handler for sensor 2 conversion ready signal.
+ * Interrupt handlers for sensors 2-6 conversion ready signal.  Same code as
+ * above but comments are removed for compactness.
  */
 void Sensor2Ready(void) {
-    uint32_t rdy_port = sensor_io[SENSOR2].rdy_port;
-    uint32_t rdy_pin = sensor_io[SENSOR2].rdy_pin;
-    bool *isr_flag = sensor_io[SENSOR2].isr_flag;
-
-    /* Clear the interrupt */
-    GPIOIntClear(rdy_port, rdy_pin);
-
-    /* Set the flag that the conversion is complete */
-    *isr_flag = true;
+    GPIOIntClear(sensor_io[SENSOR2].rdy_port, sensor_io[SENSOR2].rdy_pin);
+    *sensor_io[SENSOR2].isr_flag = true;
 }
-
-/* -----------------------------------------------------------------------------
- * Interrupt handler for sensor 3 conversion ready signal.
- */
 void Sensor3Ready(void) {
-    uint32_t rdy_port = sensor_io[SENSOR3].rdy_port;
-    uint32_t rdy_pin = sensor_io[SENSOR3].rdy_pin;
-    bool *isr_flag = sensor_io[SENSOR3].isr_flag;
-
-    /* Clear the interrupt */
-    GPIOIntClear(rdy_port, rdy_pin);
-
-    /* Set the flag that the conversion is complete */
-    *isr_flag = true;
+    GPIOIntClear(sensor_io[SENSOR3].rdy_port, sensor_io[SENSOR3].rdy_pin);
+    *sensor_io[SENSOR3].isr_flag = true;
 }
-
-/* -----------------------------------------------------------------------------
- * Interrupt handler for sensor 4 conversion ready signal.
- */
 void Sensor4Ready(void) {
-    uint32_t rdy_port = sensor_io[SENSOR4].rdy_port;
-    uint32_t rdy_pin = sensor_io[SENSOR4].rdy_pin;
-    bool *isr_flag = sensor_io[SENSOR4].isr_flag;
-
-    /* Clear the interrupt */
-    GPIOIntClear(rdy_port, rdy_pin);
-
-    /* Set the flag that the conversion is complete */
-    *isr_flag = true;
+    GPIOIntClear(sensor_io[SENSOR4].rdy_port, sensor_io[SENSOR4].rdy_pin);
+    *sensor_io[SENSOR4].isr_flag = true;
 }
-
-/* -----------------------------------------------------------------------------
- * Interrupt handler for sensor 5 conversion ready signal.
- */
 void Sensor5Ready(void) {
-    uint32_t rdy_port = sensor_io[SENSOR5].rdy_port;
-    uint32_t rdy_pin = sensor_io[SENSOR5].rdy_pin;
-    bool *isr_flag = sensor_io[SENSOR5].isr_flag;
-
-    /* Clear the interrupt */
-    GPIOIntClear(rdy_port, rdy_pin);
-
-    /* Set the flag that the conversion is complete */
-    *isr_flag = true;
+    GPIOIntClear(sensor_io[SENSOR5].rdy_port, sensor_io[SENSOR5].rdy_pin);
+    *sensor_io[SENSOR5].isr_flag = true;
 }
-
-/* -----------------------------------------------------------------------------
- * Interrupt handler for sensor 6 conversion ready signal.
- */
 void Sensor6Ready(void) {
-    uint32_t rdy_port = sensor_io[SENSOR6].rdy_port;
-    uint32_t rdy_pin = sensor_io[SENSOR6].rdy_pin;
-    bool *isr_flag = sensor_io[SENSOR6].isr_flag;
-
-    /* Clear the interrupt */
-    GPIOIntClear(rdy_port, rdy_pin);
-
-    /* Set the flag that the conversion is complete */
-    *isr_flag = true;
+    GPIOIntClear(sensor_io[SENSOR6].rdy_port, sensor_io[SENSOR6].rdy_pin);
+    *sensor_io[SENSOR6].isr_flag = true;
 }
+
+
 
 /* -----------------------------------------------------------------------------
  * Send a number of bytes to an I2C address.
@@ -313,104 +239,6 @@ void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
     }
 }
 
-/* -----------------------------------------------------------------------------
- * Receive one byte from an I2C interface.
- */
-uint8_t I2CReceive1(uint32_t slave_addr, uint8_t reg) {
-
-    // Specify that we are writing (a register address) to the slave device
-    I2CMasterSlaveAddrSet(I2C0_BASE, slave_addr, false);
-
-    // Specify register to be read
-    I2CMasterDataPut(I2C0_BASE, reg);
-
-    // Send control byte and register address byte to slave device
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-
-    // Wait for MCU to finish transaction
-    while(I2CMasterBusy(I2C0_BASE));
-
-    // Specify that we are going to read from slave device
-    I2CMasterSlaveAddrSet(I2C0_BASE, slave_addr, true);
-
-    // Send control byte and read from the register we specified
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_RECEIVE);
-
-    // Wait for MCU to finish transaction
-    while(I2CMasterBusy(I2C0_BASE));
-
-    // Return one byte pulled from the specified register
-    return I2CMasterDataGet(I2C0_BASE);
-}
-
-/* -----------------------------------------------------------------------------
- * Receive two bytes from an I2C interface.
- */
-uint16_t I2CReceive2(uint32_t slave_addr, uint8_t reg) {
-
-    uint8_t msb, lsb;
-
-    // Specify that we are writing (a register address) to the slave device
-    I2CMasterSlaveAddrSet(I2C0_BASE, slave_addr, false);
-
-    // Specify register to be read
-    I2CMasterDataPut(I2C0_BASE, reg);
-
-    // Send control byte and register address byte to slave device
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
-
-    // Wait for MCU to finish transaction
-    while(I2CMasterBusy(I2C0_BASE));
-
-    // Specify that we are going to read from slave device
-    I2CMasterSlaveAddrSet(I2C0_BASE, slave_addr, true);
-
-    // Send control byte and read from the register we specified
-    I2CMasterBurstLengthSet(I2C0_BASE, 0x2);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_START);
-
-    // Wait for MCU to finish transaction
-    while(I2CMasterBusy(I2C0_BASE));
-
-    // Capture the MSB
-    msb = I2CMasterDataGet(I2C0_BASE);
-
-    //I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
-    I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
-
-    // Wait for MCU to finish transaction
-    while(I2CMasterBusy(I2C0_BASE));
-
-    // Capture the LSB
-    lsb = I2CMasterDataGet(I2C0_BASE);
-
-    // Assemble the uint16 from MSB+LSB
-    return (msb << 8) | lsb;
-}
-
-
-
-//*****************************************************************************
-//! Indicates whether or not the I2C bus has timed out.
-//!
-//! \param ui32Base is the base address of the I2C module.
-//!
-//! This function returns an indication of whether or not the I2C bus has time
-//!  out.  The I2C Master Timeout Value must be set.
-//!
-//! \return Returns \b true if the I2C bus has timed out; otherwise, returns
-//! \b false.
-//*****************************************************************************
-bool I2CMasterTimeout(uint32_t ui32Base) {
-
-    // Return the bus timeout status
-    if (HWREG(ui32Base + I2C_O_MCS) & I2C_MCS_CLKTO) {
-        return(true);
-    } else {
-       return(false);
-    }
-}
-
 
 
 int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
@@ -463,7 +291,7 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
         if (i == 0) {
             /* First byte starts the transaction */
             I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_START);
-        } else if (i == len) {
+        } else if (i == (len-1)) {
             /* Last byte finishes the transaction */
             I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
         } else {
@@ -475,7 +303,6 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
 
         /* Capture one byte */
         buf[i] = I2CMasterDataGet(base);
-
     }
 
     /* Check the I2C bus for errors */
@@ -499,8 +326,320 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
     return 0;
 }
 
-/* -----------------------------------------------------------------------------
+
+
+
+
+
+
+
+
+
+
+
+#ifdef hold
+
+
+
+/*
+ *  ======== setupAD7746 ========
  *
+ */
+int setupAD7746(I2C_Handle i2c, I2C_Transaction i2cTransaction, uint8_t device)
+{
+  uint8_t txBuffer[2];
+  uint8_t rxBuffer[4];
+  uint8_t offsH, offsL, gainH, gainL;
+
+  Task_sleep(100);
+
+  // Configure CAPACITANCE MEASUREMENT
+  // -----------------------------------------------
+  txBuffer[0]                 = AD7746_CAP_SETUP_REG;
+  txBuffer[1]                 = adcsC2D1;
+  i2cTransaction.slaveAddress = AD7746_ADDR;
+  i2cTransaction.writeBuf     = txBuffer;
+  i2cTransaction.writeCount   = 2;
+  i2cTransaction.readBuf      = rxBuffer;
+  i2cTransaction.readCount    = 0;
+
+  if (!I2C_transfer(i2c, &i2cTransaction)) {
+    System_printf("(%d) Error in setup of AD7746 (default capacitors).\n", device);
+    System_flush();
+    return -1;
+  }
+  System_flush();
+
+  Task_sleep(100);
+
+  // Configure VOLTAGE/TEMPERATURE (enable internal temperature sensor)
+  // -----------------------------------------------
+  txBuffer[0] = AD7746_VT_SETUP_REG;
+  txBuffer[1] = AD7746_VT_SETUP_INT_TEMP;
+
+  if (!I2C_transfer(i2c, &i2cTransaction)) {
+    System_printf("(%d) Error in setup of AD7746 (setup for temperature reading).\n", device);
+    System_flush();
+    return -1;
+  }
+  System_flush();
+
+  Task_sleep(100);
+
+  // Configure EXCITATION
+  // -----------------------------------------------
+  txBuffer[0] = AD7746_EXC_SETUP_REG;
+  txBuffer[1] = AD7746_EXC_SET_A;
+
+  if (!I2C_transfer(i2c, &i2cTransaction)) {
+    System_printf("(%d) Error in setup of AD7746 (configuring excitation).\n", device);
+    System_flush();
+    return -1;
+  }
+  System_flush();
+
+  Task_sleep(100);
+
+  // Configure CONVERSION TIME
+  // -----------------------------------------------
+  txBuffer[0] = AD7746_CFG_REG;
+  txBuffer[1] = adAllSensorConversionTime;
+
+  if (!I2C_transfer(i2c, &i2cTransaction)) {
+    System_printf("(%d) Error in setup of AD7746 (setting conversion time).\n", device);
+    System_flush();
+    return -1;
+  }
+  System_flush();
+
+  Task_sleep(100);
+
+
+  // Read CAPACITATIVE OFFSET CALIBRATION/GAIN
+  // -----------------------------------------------
+
+  /* Read AD7746 register starting at Cap Offset H, total of 4 bytes */
+  txBuffer[0]                 = AD7746_CAP_OFFSET_H;
+  i2cTransaction.writeBuf     = txBuffer;
+  i2cTransaction.writeCount   = 1;
+  i2cTransaction.readBuf      = rxBuffer;
+  i2cTransaction.readCount    = 4;
+
+  if (!I2C_transfer(i2c, &i2cTransaction)) {
+    System_printf("(%d) Error in setup of AD7746 (reading calibration).\n", device);
+    System_flush();
+    return -1;
+  }
+
+  offsH = rxBuffer[0];
+  offsL = rxBuffer[1];
+  gainH = rxBuffer[2];
+  gainL = rxBuffer[3];
+
+  System_printf("(%d) Calibrations: offset H: %d, offset L: %d, gain H: %d, gain L: %d\n", device, offsH, offsL, gainH, gainL);
+  System_flush();
+
+  return 0;
+}
+
+
+
+/*
+ *  ======== triggerAD7746capacitance ========
+ *
+ */
+int triggerAD7746capacitance(I2C_Handle i2c, I2C_Transaction i2cTransaction, adConversionTime convTim, adCapSelect cap, uint8_t device) {
+
+    uint8_t txBuffer[2];
+    uint8_t rxBuffer[4];
+
+    /* Common message setup fields */
+    i2cTransaction.slaveAddress = AD7746_ADDR;
+    i2cTransaction.writeBuf     = txBuffer;
+    i2cTransaction.writeCount   = 2;
+    i2cTransaction.readBuf      = rxBuffer;
+    i2cTransaction.readCount    = 0;
+
+    /* Build first message to device: set capacitor configuration */
+    txBuffer[0] = AD7746_CAP_SETUP_REG;
+    txBuffer[1] = cap;
+
+    if (!I2C_transfer(i2c, &i2cTransaction)) {
+      System_printf("(%d) Error in AD7746 trigger (cap selection) of AD7746.\n", device);
+      System_flush();
+      return -1;
+    }
+
+    /* Build second message to device: set conversion time and trigger conversion */
+    txBuffer[0] = AD7746_CFG_REG;
+    txBuffer[1] = convTim;
+
+    if (!I2C_transfer(i2c, &i2cTransaction)) {
+      System_printf("(%d) Error in AD7746 trigger (set conversion time) of AD7746.\n", device);
+      System_flush();
+      return(-1);
+    }
+
+    return 0;
+}
+
+
+/*
+ *  ======== triggerAD7746 ========
+ *
+ */
+int triggerAD7746temperature(I2C_Handle i2c, I2C_Transaction i2cTransaction, uint8_t device) {
+
+    uint8_t txBuffer[2];
+    uint8_t rxBuffer[4];
+
+    /* Common message setup fields */
+    i2cTransaction.slaveAddress = AD7746_ADDR;
+    i2cTransaction.writeBuf     = txBuffer;
+    i2cTransaction.writeCount   = 2;
+    i2cTransaction.readBuf      = rxBuffer;
+    i2cTransaction.readCount    = 0;
+
+    //TODO: Probably don't need this since it gets enabled above?
+    /* Build message to device, read the temperature */
+    /*
+    txBuffer[0] = AD7746_VT_SETUP_REG;
+    txBuffer[1] = AD7746_VT_SETUP_INT_TEMP;
+
+    if (!I2C_transfer(i2c, &i2cTransaction)) {
+      System_printf("(%d) Error in AD7746 trigger (temperature enable) of AD7746.\n", device);
+      System_flush();
+      return -1;
+    }
+    */
+
+    /* Build message to device: set conversion time and trigger conversion */
+    txBuffer[0] = AD7746_CFG_REG;
+    txBuffer[1] = DEFAULT_TEMPERATURE_CONVERSION_TIME;
+
+    if (!I2C_transfer(i2c, &i2cTransaction)) {
+      System_printf("(%d) Error in AD7746 trigger (set temperature conversion time) of AD7746.\n", device);
+      System_flush();
+      return(-1);
+    }
+
+    return 0;
+}
+
+/*  ======== readAD7746 ========
+ *  function to read AD7746 capacitance & temperature
+ *
+ */
+int readAD7746(I2C_Handle i2c, I2C_Transaction i2cTransaction, adCapSelect cap, uint8_t device) {
+
+  uint8_t txBuffer[1];
+  uint8_t rxBuffer[6];
+  uint32_t ci;
+  float cr,c;
+
+  /* Read Ad7746 */
+  txBuffer[0] = AD7746_READ;
+  i2cTransaction.slaveAddress = AD7746_ADDR;
+  i2cTransaction.writeBuf     = txBuffer;
+  i2cTransaction.writeCount   = 1;
+  i2cTransaction.readBuf      = rxBuffer;
+  i2cTransaction.readCount    = 6; // 3 bytes for cap only, 6 for cap and temp (see spec page 14)
+
+  if (!I2C_transfer(i2c, &i2cTransaction)) {
+    System_printf("(%d) Error in reading AD7746.\n", device);
+    System_flush();
+    return -1;
+  }
+
+  /* Get access to resource */
+  Semaphore_pend(semHandle, BIOS_WAIT_FOREVER);
+
+  // Put the values into the buffer used to talk back up the SPI
+  switch(cap) {
+
+    // Differential capacitor value
+    case adcsC2D1:
+      spiMessageOut.msg.sensor[device].diffCapHigh = rxBuffer[0];
+      spiMessageOut.msg.sensor[device].diffCapMid  = rxBuffer[1];
+      spiMessageOut.msg.sensor[device].diffCapLow  = rxBuffer[2];
+
+      // Calculate the capacitance as a float, for usage in the filtered value
+      cr = (float) ((rxBuffer[0] << 16) + (rxBuffer[1] << 8) + (rxBuffer[2]));
+      c  = -4.096 + (cr * 8.192 / (1 << 24));
+
+      // Apply filtering algorithm to the value and the previous values
+      filter[device].c = (FILTER_COEFF * filter[device].cprev) + ((1.0 - FILTER_COEFF) * c);
+
+      // Drop the last values down to the 'previous' value position
+      filter[device].cprev = filter[device].c;
+
+      // Reverse convert the floating point filtered capacitance back into 3 bytes of raw value
+      c  = (filter[device].c + 4.096) * (1 << 24) / 8.192;
+      ci = (uint32_t) c;
+
+      // Assign back to the messaging buffer
+      spiMessageOut.msg.sensor[device].filtCapHigh = (ci >> 16) & 0xFF;
+      spiMessageOut.msg.sensor[device].filtCapMid  = (ci >>  8) & 0xFF;
+      spiMessageOut.msg.sensor[device].filtCapLow  = (ci      ) & 0xFF;
+      break;
+
+    // Single C1 value
+    case adcsC1D0:
+      spiMessageOut.msg.sensor[device].c1High = rxBuffer[0];
+      spiMessageOut.msg.sensor[device].c1Mid  = rxBuffer[1];
+      spiMessageOut.msg.sensor[device].c1Low  = rxBuffer[2];
+      break;
+
+    // Single C2 value:
+    case adcsC2D0:
+      spiMessageOut.msg.sensor[device].c2High = rxBuffer[0];
+      spiMessageOut.msg.sensor[device].c2Mid  = rxBuffer[1];
+      spiMessageOut.msg.sensor[device].c2Low  = rxBuffer[2];
+      break;
+  }
+
+  // Put the temperature values in each time, even if they're stale
+  spiMessageOut.msg.sensor[device].chiptempHigh = rxBuffer[3];
+  spiMessageOut.msg.sensor[device].chiptempMid  = rxBuffer[4];
+  spiMessageOut.msg.sensor[device].chiptempLow  = rxBuffer[5];
+
+  /* Unlock resource */
+  Semaphore_post(semHandle);
+
+  return 0;
+}
+
+
+#endif
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/* -----------------------------------------------------------------------------
+ * Sensor RTOS task main loop.  This task handles the communication to each
+ * capacitance sensor and the temperature/humidity sensors.
+ *
+ * Runs and never returns.
  */
 static void Sensor_Task(void *pvParameters) {
 
@@ -535,6 +674,7 @@ static void Sensor_Task(void *pvParameters) {
             I2CReceive(sensor_io[SENSOR4].periph_base, AD7746_ADDR, 0xE3, vals, 6);
             I2CReceive(sensor_io[SENSOR5].periph_base, AD7746_ADDR, 0xE3, vals, 6);
             */
+            //I2CInit(SENSOR6);
             I2CReceive(sensor_io[SENSOR6].periph_base, AD7746_ADDR, AD7746_STATUS_REG, vals, 6);
 
 
@@ -557,11 +697,11 @@ static void Sensor_Task(void *pvParameters) {
 }
 
 /* -----------------------------------------------------------------------------
- *
+ * Sensor RTOS task initialization, runs once at startup.
  */
 uint32_t Sensor_Task_Init(void) {
 
-    /* Initialize the I2C busses (6 of them) */
+    /* Initialize the I2C bus for each sensor */
     I2CInit(SENSOR1);
     I2CInit(SENSOR2);
     I2CInit(SENSOR3);

@@ -1,5 +1,5 @@
 /*
- * SSI0.c
+ * ssi_driver.c
  *
  * Copyright (c) 2024, W. M. Keck Observatory
  * All rights reserved.
@@ -8,7 +8,7 @@
  *
  */
 
-#define SSI0_C_
+#define SSI_DRIVER_C_
 #include "includes.h"
 
 /* Variables and pointers used */
