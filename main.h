@@ -11,6 +11,8 @@
 #ifndef MAIN_H_
 #define MAIN_H_
 
+#include "includes.h"
+
 /* Only instantiate variables if we are the .c routine for this header file. */
 #ifndef MAIN_C_
   #define EXTERN extern
@@ -18,7 +20,6 @@
   #define EXTERN
 #endif
 
-#include "includes.h"
 
 //*****************************************************************************
 // The mutex that protects concurrent access of UART from multiple tasks.

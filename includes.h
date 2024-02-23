@@ -50,18 +50,13 @@
 #include "queue.h"
 #include "semphr.h"
 
+// Drivers
+#include "ssi_driver.h"
+#include "sensor_driver.h"
+
 // Tasks
 #include "main.h"
 #include "sensor_task.h"
-#include "ssi_task.h"     // This must be included after sensor_task.h because it relies on enums in that file
-
-// External interfaces
-#include "sensor_driver.h"
-#include "ssi_driver.h"
-
+#include "ssi_task.h"      // This must be included after sensor_task.h because it relies on enums in that file
 
 #endif /* INCLUDES_H_ */
-
-
-
-
