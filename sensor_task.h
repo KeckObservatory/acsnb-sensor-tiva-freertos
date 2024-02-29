@@ -64,6 +64,7 @@
 #define AD7746_READ               0x01
 
 // Register definitions
+#define AD7746_RESET_REG          0xBF
 #define AD7746_STATUS_REG         0x00
 #define AD7746_CAP_SETUP_REG      0x07
 
@@ -92,7 +93,6 @@
 #define AD7746_EXC_SETUP_REG      0x09
 #define AD7746_EXC_SET_A          0b01001011
 
-#define AD7746_CFG_REG            0x0A
 #define AD7746_CAP_OFFSET_H       0x0D
 #define AD7746_CAP_OFFSET_L       0x0E
 #define AD7746_CAP_GAIN_H         0x0F
@@ -112,22 +112,6 @@ typedef enum {
 } adTemperatureConversionTime;
 #define DEFAULT_TEMPERATURE_CONVERSION_TIME adtct32msSingle
 #define AD7746_CAP_VS_TEMP_TRIGGER_INTERVAL 10   // Trigger one temperature read every 10 cap reads
-
-
-/* Conversion time selection choices (spec page 18) */
-typedef enum {
-
-  adct11msCont                  = 0x01, // 11ms continuous
-  adct11msSingle                = 0x02, // 11ms single
-  adct38msCont                  = 0x19, // 38.0ms continuous
-  adct38msSingle                = 0x1A, // 38ms single
-  adct109msSingle               = 0x3A  // 109.6ms single
-
-} adConversionTime;
-
-// Conversion time is selected via the SPI interface
-#define FAST_CONVERSION_TIME      adct38msSingle
-#define DEFAULT_CONVERSION_TIME   adct109msSingle
 
 
 
@@ -197,22 +181,61 @@ typedef struct {
 #endif
 
 
-// Task state machine discrete states
+/* ----------------------------------------------------------------------------- */
+// Task state machine discrete states, separate for each sensor
 typedef enum {
     STATE_POR                 = 0,
     STATE_INIT                = 1,
     STATE_INIT_FAILED         = 2,
     STATE_INIT_FAILED_WAIT    = 3,
-    STATE_START               = 4,
-    STATE_RUNNING             = 5,
+    STATE_TRIGGER             = 4,
+    STATE_TRIGGER_WAIT        = 5,
     STATE_FAULTED             = 6
 } sensor_state_t;
 
+/* ----------------------------------------------------------------------------- */
 /* PCA9536 state, sets the old/new ACS relay positions */
 typedef enum {
     SWITCH_LBL                = 0,
     SWITCH_KONA               = 1
 } sensor_relay_position_t;
+
+/* ----------------------------------------------------------------------------- */
+/* Single / differential capacitance selection choices */
+typedef enum {
+    MODE_CAP_DIFFERENTIAL     = 0,
+    MODE_CAP_CAP1             = 1,
+    MODE_CAP_CAP2             = 2,
+    MODE_CAP_MAX              = 3  // Define a maximum value, for looping through the enum
+} sensor_cap_mode_t;
+
+#define ADCS_DIFFERENTIAL     0xE0 // CIN2, DIFF=1 (differential capacitance only)
+#define ADCS_CAP1             0x80 // CIN1, DIFF=0 (capacitor 1 only)
+#define ADCS_CAP2             0xC0 // CIN2, DIFF=0 (capacitor 2 only)
+
+/* ----------------------------------------------------------------------------- */
+/* Capacitance conversion times selection */
+typedef enum {
+    CONVERT_TIME_109MS        = 0, // Default
+    CONVERT_TIME_38MS         = 1,
+    CONVERT_TIME_11MS         = 2
+} sensor_conversion_time_t;
+
+// Configuration register (spec page 18)
+// Bit 7: VTF1
+// Bit 6: VTF0   (00 = default digital filter setup)
+// Bit 5: CAPF2
+// Bit 4: CAPF1
+// Bit 3: CAPF0  (001 = 11.9ms conversion time, 011 = 38.0ms, 111 = 109.6ms)
+// Bit 2: MD2
+// Bit 1: MD1
+// Bit 0: MD0    (010 = single conversion, 000 = idle)
+#define AD7746_CFG_REG        0x0A
+#define ADCT_11MS_SINGLE      0b00001010 // 0x0A = 11ms single
+#define ADCT_38MS_SINGLE      0b00011010 // 0x1A = 38ms single
+#define ADCT_109MS_SINGLE     0b00111010 // 0x3A = 109.6ms single
+#define ADCT_109MS_CONT       0b00111001
+#define ADCT_109MS_IDLE       0b00111000 // 0x38 = 109.6ms, IDLE
 
 
 /*
@@ -222,17 +245,23 @@ typedef enum {
 typedef struct {
 
     /* State machine */
-    sensor_state_t   state;
-    uint32_t         wait;
+    sensor_state_t            state;
+
+    /* Timer value for initialization delay (after a failed init) */
+    uint32_t                  init_wait;
 
     /* Sensor switching */
-    sensor_relay_position_t relay_position;
+    sensor_relay_position_t   relay_position;
 
+    /* Capacitor selection */
+    sensor_cap_mode_t         cap_mode;
 
-} sensor_data_t;
+    /* Capacitor conversion time */
+    sensor_conversion_time_t  conversion_time;
 
-EXTERN sensor_data_t sensor_data[MAX_SENSORS];
+} sensor_control_t;
 
+EXTERN sensor_control_t sensor_control[MAX_SENSORS];
 
 
 
@@ -240,6 +269,11 @@ EXTERN sensor_data_t sensor_data[MAX_SENSORS];
  * Function prototypes
  * -----------------------------------------------------------------------------
  */
+
+EXTERN bool Sensor_Reset(sensor_name_t sensor);
+EXTERN bool Sensor_Init(sensor_name_t sensor);
+EXTERN bool Sensor_Trigger(sensor_name_t sensor);
+EXTERN void Sensor_Process(sensor_name_t sensor);
 EXTERN uint32_t Sensor_Task_Init(void);
 
 #undef EXTERN

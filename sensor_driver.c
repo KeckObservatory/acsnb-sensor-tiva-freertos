@@ -37,6 +37,9 @@ bool I2CMasterTimeout(uint32_t ui32Base) {
  */
 void I2CInit(sensor_name_t sensor) {
 
+    uint8_t i;
+    volatile uint32_t ui32Loop;
+
     uint32_t peripheral = sensor_io[sensor].peripheral;
     uint32_t periph_base = sensor_io[sensor].periph_base;
     uint32_t port_base = sensor_io[sensor].port_base;
@@ -48,6 +51,38 @@ void I2CInit(sensor_name_t sensor) {
     uint32_t rdy_pin = sensor_io[sensor].rdy_pin;
     isrFunc isr = sensor_io[sensor].isr;
     bool *isr_flag = sensor_io[sensor].isr_flag;
+
+    /* Dear reader, there is a crazy hack here.
+     *
+     * It is possible that we interrupted communication with an I2C device.  This will result in a
+     * missing stop condition, which leaves the SDA line of the bus in a state (logic 0) where any
+     * further attempts to communicate will result in I2C_MASTER_ERR_ARB_LOST and no way to reset
+     * out of it.  The SysCtlPeripheralReset() call does not clear the condition.  There is nothing
+     * short of power cycling the sensor that would clear the condition.  Until I found this thread:
+     *
+     *   https://e2e.ti.com/support/wireless-connectivity/wi-fi-group/wifi/f/wi-fi-forum/815551/cc3220sf-i2c-i2c_master_err_arb_lost-on-a-few-boards
+     *
+     * The recommendation is to switch SCL pin to GPIO, generate a few pulses at SCL line by toggling
+     * hi-low state of GPIO output, switch pin back to SCL, then reinitialize the I2C bus.
+     *
+     * That is what this piece of code below does.  It was verified to work at least once on 2024-02-28
+     * when the I2C bus got hung up with SDA in a logic low state.  It took 5 cycles of the clock bus
+     * to get SDA back into the right state, so we use 10 cycles to be sure.
+     *
+     * To use this effectively, detect the ARB lost condition with a call to I2CMasterErr() and re-run
+     * the I2CInit() function.
+     *
+     * This can and will eventually occur when a sensor is hot plugged!
+     */
+    GPIOPinTypeGPIOOutput(port_base, scl_pin);
+    for (i = 0; i < 10; i++) {
+        GPIOPinWrite(port_base, scl_pin, 0);
+        for(ui32Loop = 0; ui32Loop < 100000; ui32Loop++) {}
+
+        GPIOPinWrite(port_base, scl_pin, scl_pin);
+        for(ui32Loop = 0; ui32Loop < 100000; ui32Loop++) {}
+
+    }
 
     /* Enable the I2C peripheral */
     SysCtlPeripheralEnable(peripheral);
@@ -84,6 +119,9 @@ void I2CInit(sensor_name_t sensor) {
 
     /* Connect an interrupt handler to the ready select pin. */
     GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
+    //GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
+    //GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
+    GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
     GPIOIntRegister(rdy_port, isr);
 
     /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
@@ -138,13 +176,13 @@ void Sensor6Ready(void) {
 /* -----------------------------------------------------------------------------
  * Send a number of bytes to an I2C address.
  */
-void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
+void I2CSend_old(uint32_t base, uint8_t slave_addr, uint8_t num_of_args, ...) {
 
     uint8_t i;
 
     // Tell the master module what address it will place on the bus when
     // communicating with the slave.
-    I2CMasterSlaveAddrSet(I2C0_BASE, slave_addr, false);
+    I2CMasterSlaveAddrSet(base, slave_addr, false);
 
     // Stores list of variable number of arguments
     va_list vargs;
@@ -154,17 +192,18 @@ void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
     va_start(vargs, num_of_args);
 
     // Put data to be sent into FIFO
-    I2CMasterDataPut(I2C0_BASE, va_arg(vargs, uint32_t));
+    //I2CMasterDataPut(base, va_arg(vargs, uint32_t));
+    I2CMasterDataPut(base, va_arg(vargs, uint8_t));
 
     // If there is only one argument, we only need to use the
     // single send I2C function
     if(num_of_args == 1) {
 
         // Initiate send of data from the MCU
-        I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_SINGLE_SEND);
+        I2CMasterControl(base, I2C_MASTER_CMD_SINGLE_SEND);
 
         // Wait until MCU is done transferring.
-        while(I2CMasterBusy(I2C0_BASE));
+        while(I2CMasterBusy(base));
 
         // "close" variable argument list
         va_end(vargs);
@@ -173,32 +212,32 @@ void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
     } else {
 
         // Initiate send of data from the MCU
-        I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_START);
+        I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_START);
 
         // Wait until MCU is done transferring.
-        while(I2CMasterBusy(I2C0_BASE));
+        while(I2CMasterBusy(base));
 
         // Send num_of_args-2 pieces of data, using the BURST_SEND_CONT command of the I2C module
         for(i = 1; i < (num_of_args - 1); i++) {
 
             // Put next piece of data into I2C FIFO
-            I2CMasterDataPut(I2C0_BASE, va_arg(vargs, uint32_t));
+            I2CMasterDataPut(base, va_arg(vargs, uint32_t));
 
             // Send next data that was just placed into FIFO
-            I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_CONT);
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_CONT);
 
             // Wait until MCU is done transferring.
-            while(I2CMasterBusy(I2C0_BASE));
+            while(I2CMasterBusy(base));
         }
 
         // Put last piece of data into I2C FIFO
-        I2CMasterDataPut(I2C0_BASE, va_arg(vargs, uint32_t));
+        I2CMasterDataPut(base, va_arg(vargs, uint32_t));
 
         // Send next data that was just placed into FIFO
-        I2CMasterControl(I2C0_BASE, I2C_MASTER_CMD_BURST_SEND_FINISH);
+        I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_FINISH);
 
         // Wait until MCU is done transferring.
-        while(I2CMasterBusy(I2C0_BASE));
+        while(I2CMasterBusy(base));
 
         // "close" variable args list
         va_end(vargs);
@@ -207,7 +246,8 @@ void I2CSend(uint8_t slave_addr, uint8_t num_of_args, ...) {
 
 
 
-int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+
+int8_t I2CSend(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
 
     uint8_t i;
     uint32_t err;
@@ -220,7 +260,6 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
         /* Wait for MCU to time out */
         //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
 
-        /*
         if (err == I2C_MASTER_ERR_ADDR_ACK)
             return -1;
         if (err == I2C_MASTER_ERR_DATA_ACK)
@@ -229,10 +268,96 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
             return -3;
         if (err == I2C_MASTER_ERR_CLK_TOUT)
             return -4;
-        */
     }
 
+    /* Specify that we are writing to the slave device */
+    I2CMasterSlaveAddrSet(base, slave_addr, false);
 
+    /* One byte transmit or multiple? */
+    if (len == 1) {
+
+        /* Send the first byte */
+        I2CMasterDataPut(base, buf[0]);
+
+        /* Single byte send has a special control mode */
+        I2CMasterControl(base, I2C_MASTER_CMD_SINGLE_SEND);
+
+        /* Wait for MCU to finish transaction */
+        while(I2CMasterBusy(base));
+
+    } else {
+
+        /* Send the first byte */
+        I2CMasterDataPut(base, buf[0]);
+
+        /* Start a multi-byte write to the device */
+        I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_START);
+
+        /* Wait for MCU to finish transaction */
+        while(I2CMasterBusy(base));
+
+        /* Send the buffer */
+        for (i = 1; i < len; i++) {
+
+            I2CMasterDataPut(base, buf[i]);
+
+            /* Last byte finishes the transaction */
+            if (i == (len-1)) {
+                I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_FINISH);
+            } else {
+                I2CMasterControl(base, I2C_MASTER_CMD_BURST_SEND_CONT);
+            }
+
+            /* Wait for MCU to finish transaction */
+            while(I2CMasterBusy(base));
+        }
+    }
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err == I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err == I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err == I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err == I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
+
+    return 0;
+}
+
+
+
+int8_t I2CReceive2(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+
+    uint8_t i;
+    uint32_t err;
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err == I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err == I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err == I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err == I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
 
     /* Specify that we are writing (a register address) to the slave device */
     I2CMasterSlaveAddrSet(base, slave_addr, false);
@@ -293,6 +418,90 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
 }
 
 
+
+
+
+
+int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+
+    uint8_t i;
+    uint32_t err;
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err == I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err == I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err == I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err == I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
+
+    /* Specify that we are writing (a register address) to the slave device */
+    I2CMasterSlaveAddrSet(base, slave_addr, false);
+
+    /* Specify register to be read */
+    I2CMasterDataPut(base, reg);
+
+    /* Send register address byte to slave device */
+    I2CMasterControl(base, I2C_MASTER_CMD_SINGLE_SEND);
+
+    /* Wait for MCU to finish transaction */
+    while(I2CMasterBusy(base));
+
+    /* Now specify that we are going to read from slave device */
+    I2CMasterSlaveAddrSet(base, slave_addr, true);
+
+    /* Send control byte and read from the register we specified */
+    I2CMasterBurstLengthSet(base, len);
+
+    for (i = 0; i < len; i++) {
+
+        if (i == 0) {
+            /* First byte starts the transaction */
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_START);
+        } else if (i == (len-1)) {
+            /* Last byte finishes the transaction */
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+        } else {
+            I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+        }
+
+        /* Wait for MCU to finish transaction */
+        while(I2CMasterBusy(base));
+
+        /* Capture one byte */
+        buf[i] = I2CMasterDataGet(base);
+    }
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err == I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err == I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err == I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err == I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
+
+    return 0;
+}
 
 
 
