@@ -57,48 +57,82 @@
 #define HDC1080_MANUFID           0xFE
 #define HDC1080_DEVICEID          0xFF
 
-// -----------------------------------------------------------------------------
-// AD7746 - Capacitance sensor
+
+
+
+
+/* -----------------------------------------------------------------------------
+ * AD7746 - Capacitance sensor
+ */
+
+/* Base address of device on I2C bus */
 #define AD7746_ADDR               0x48
+
+/* Commands */
 #define AD7746_WRITE              0x00
 #define AD7746_READ               0x01
 
-// Register definitions
+/* Registers and their definitions */
 #define AD7746_RESET_REG          0xBF
 #define AD7746_STATUS_REG         0x00
-#define AD7746_CAP_SETUP_REG      0x07
 
-// Voltage setup register definitions (spec pg 16)
-// Bit 7: VTEN (1 = enables voltage/temperature channel for single conversion)
-// Bit 6-5: VTMD1, VTMD0 Channel Input (00 = Internal temperature sensor)
-// Bit 4: EXTREF (0 = select the on-chip internal reference)
-// Bit 3-2: (00 - These bits must be 0 for proper operation)
-// Bit 1: VTSHORT (0 = disable internal short of the voltage/temperature channel input for test purposes)
-// Bit 0 VTCHOP (1 = sets internal chopping on the voltage/temperature channel / must be set to 1 for the specified voltage/temperature channel performance)
+/* Capacitance setup register definitions (spec pg 16)
+ *
+ * Bit 7: CAPEN   (1 = enables capacitive channel for single conversion, continuous conversion, or calibration)
+ * Bit 6: CIN2    (1 = switches the internal multiplexer to the second capacitive input on the AD7746)
+ * Bit 5: CAPDIFF (1 = sets differential mode on the selected capacitive input)
+ * Bit 4-1: Set to 0.
+ * Bit 0: CAPCHOP (1 = approximately doubles the capacitive channel conversion times and slightly improves the
+                       capacitive channel noise performance for the longest conversion times)
+ */
+#define AD7746_CAP_SETUP_REG      0x07
+#define AD7746_CAP_DIFFERENTIAL   0b11100000 // 0xE0 = CIN2, DIFF=1 (differential capacitance only)
+#define AD7746_CAP_CAP1           0b10000000 // 0x80 = CIN1, DIFF=0 (capacitor 1 only)
+#define AD7746_CAP_CAP2           0b11000000 // 0xC0 = CIN2, DIFF=0 (capacitor 2 only)
+
+/* Voltage setup register definitions (spec pg 16)
+ *
+ * Bit 7: VTEN (1 = enables voltage/temperature channel for single conversion)
+ * Bit 6-5: VTMD1, VTMD0 Channel Input (00 = Internal temperature sensor)
+ * Bit 4: EXTREF (0 = select the on-chip internal reference)
+ * Bit 3-2: (00 - These bits must be 0 for proper operation)
+ * Bit 1: VTSHORT (0 = disable internal short of the voltage/temperature channel input for test purposes)
+ * Bit 0 VTCHOP (1 = sets internal chopping on the voltage/temperature channel / must be set to 1 for the specified voltage/temperature channel performance)
+ */
 #define AD7746_VT_SETUP_REG       0x08
 #define AD7746_VT_SETUP_DISABLE   0x00
-#define AD7746_VT_SETUP_INT_TEMP  0b10000001
+#define AD7746_VT_SETUP_INT_TEMP  0b10000001 // VTEN=1, VTCHOP=1
 
-// Excitation setup register definitions (spec pg 17)
-// Bit 7: CLKCTRL (0 = default, 1 = decrease frequencies by factor of 2)
-// Bit 6: EXCON   (1 = excitation signal present on output during cap channel conversion AND during voltage/temp conversion)
-// Bit 5: EXCB    (0 = disable EXCB pin as the excitation output)
-// Bit 4: NOTEXCB (0 = disable EXCB pin as the inverted excitation output)
-// Bit 3: EXCA    (1 = enable EXCA pin as the excitation output)
-// Bit 2: NOTEXCA (0 = disable EXCA pin as the inverted excitation output)
-// Bit 1,0: EXCLV1 EXCLV0 (excitation voltage level)
-//          11 = Voltage on cap     = (+/- Vdd)/2
-//               EXC Pin Low Level  = 0
-//               EXC Pin High Level = Vdd
+/* Excitation setup register definitions (spec pg 17)
+ * Bit 7: CLKCTRL (0 = default, 1 = decrease frequencies by factor of 2)
+ * Bit 6: EXCON   (1 = excitation signal present on output during cap channel conversion AND during voltage/temp conversion)
+ * Bit 5: EXCB    (0 = disable EXCB pin as the excitation output)
+ * Bit 4: NOTEXCB (0 = disable EXCB pin as the inverted excitation output)
+ * Bit 3: EXCA    (1 = enable EXCA pin as the excitation output)
+ * Bit 2: NOTEXCA (0 = disable EXCA pin as the inverted excitation output)
+ * Bit 1,0: EXCLV1 EXCLV0 (excitation voltage level)
+ *          11 = Voltage on cap     = (+/- Vdd)/2
+ *               EXC Pin Low Level  = 0
+ *               EXC Pin High Level = Vdd
+ */
 #define AD7746_EXC_SETUP_REG      0x09
-#define AD7746_EXC_SET_A          0b01001011
+#define AD7746_EXC_SET_A          0b01001011 // EXCON=1, EXCA=1, EXCLV=1, EXCLV0=1
 
-#define AD7746_CAP_OFFSET_H       0x0D
-#define AD7746_CAP_OFFSET_L       0x0E
-#define AD7746_CAP_GAIN_H         0x0F
-#define AD7746_CAP_GAIN_L         0x10
-#define AD7746_VOLT_GAIN_H        0x11
-#define AD7746_VOLT_GAIN_L        0x12
+/* Configuration register (spec page 18)
+ * Bit 7: VTF1
+ * Bit 6: VTF0   (00 = default digital filter setup)
+ * Bit 5: CAPF2
+ * Bit 4: CAPF1
+ * Bit 3: CAPF0  (001 = 11.9ms conversion time, 011 = 38.0ms, 111 = 109.6ms)
+ * Bit 2: MD2
+ * Bit 1: MD1
+ * Bit 0: MD0    (010 = single conversion, 000 = idle)
+ */
+#define AD7746_CFG_REG            0x0A
+#define AD7746_CFG_11MS_SINGLE    0b00001010 // 0x0A = 11ms single
+#define AD7746_CFG_38MS_SINGLE    0b00011010 // 0x1A = 38ms single
+#define AD7746_CFG_109MS_SINGLE   0b00111010 // 0x3A = 109.6ms single
+
 
 
 /* Temperature conversion time selections (spec page 18) */
@@ -115,18 +149,6 @@ typedef enum {
 
 
 
-/* Single / differential capacitance selection choices */
-typedef enum {
-  //adcsC1D1                      = 0xA0, // CIN1, DIFF=1
-  adcsC2D1                      = 0xE0, // CIN2, DIFF=1
-  adcsC1D0                      = 0x80, // CIN1, DIFF=0
-  adcsC2D0                      = 0xC0  // CIN2, DIFF=0
-
-} adCapSelect;
-
-#define DEFAULT_CAPACITOR_SELECT adcsC2D1
-
-
 
 // -----------------------------------------------------------------------------
 // PCA9536 - Relay driver to switch back to old ACS connection
@@ -139,6 +161,44 @@ typedef enum {
 #define PCA9536_CONFIG_ALL_OUTPUT 0x00
 
 
+/* ----------------------------------------------------------------------------- */
+// Task state machine discrete states, separate for each sensor
+typedef enum {
+    STATE_POR                   = 0,
+    STATE_INIT                  = 1,
+    STATE_INIT_FAILED           = 2,
+    STATE_INIT_FAILED_WAIT      = 3,
+    STATE_TRIGGER               = 4,
+    STATE_TRIGGER_WAIT          = 5,
+    STATE_FAULTED               = 6
+} sensor_state_t;
+
+/* ----------------------------------------------------------------------------- */
+/* PCA9536 state, sets the old/new ACS relay positions */
+typedef enum {
+    SWITCH_LBL                  = 0,
+    SWITCH_KONA                 = 1
+} sensor_relay_position_t;
+
+/* ----------------------------------------------------------------------------- */
+/* Single / differential capacitance selection choices */
+typedef enum {
+    MODE_CAP_DIFFERENTIAL       = 0,
+    MODE_CAP_CAP1               = 1,
+    MODE_CAP_CAP2               = 2,
+    MODE_CAP_MAX                = 3  // Define a maximum value, for looping through the enum
+} sensor_cap_mode_t;
+
+/* ----------------------------------------------------------------------------- */
+/* Capacitance conversion times selection */
+typedef enum {
+    CONVERT_TIME_109MS          = 0, // Default
+    CONVERT_TIME_38MS           = 1,
+    CONVERT_TIME_11MS           = 2
+} sensor_conversion_time_t;
+
+
+
 
 
 #ifdef hold
@@ -146,25 +206,10 @@ typedef enum {
 // Task state data
 typedef struct {
 
-  uint32_t         i2cbase;
-  //  I2C_Handle       handle;
-  //  I2C_Params       i2cparams;
-  //  I2C_Transaction  trans;
-
-  uint32_t         device;
-  uint32_t         board;
-  uint32_t         intline;
-  bool            *intflag;
-
-
   bool            *switchcmd;
   swRelayPositions *switchnew;
   adCapSelect      cap;
   adCapSelect      cap_prev;
-
-  // State machine
-  taskState        state;
-  uint32_t         wait;
 
   // Time since last AD7746 interrupt
   uint32_t         inttime;
@@ -179,63 +224,6 @@ typedef struct {
 } taskParams;
 
 #endif
-
-
-/* ----------------------------------------------------------------------------- */
-// Task state machine discrete states, separate for each sensor
-typedef enum {
-    STATE_POR                 = 0,
-    STATE_INIT                = 1,
-    STATE_INIT_FAILED         = 2,
-    STATE_INIT_FAILED_WAIT    = 3,
-    STATE_TRIGGER             = 4,
-    STATE_TRIGGER_WAIT        = 5,
-    STATE_FAULTED             = 6
-} sensor_state_t;
-
-/* ----------------------------------------------------------------------------- */
-/* PCA9536 state, sets the old/new ACS relay positions */
-typedef enum {
-    SWITCH_LBL                = 0,
-    SWITCH_KONA               = 1
-} sensor_relay_position_t;
-
-/* ----------------------------------------------------------------------------- */
-/* Single / differential capacitance selection choices */
-typedef enum {
-    MODE_CAP_DIFFERENTIAL     = 0,
-    MODE_CAP_CAP1             = 1,
-    MODE_CAP_CAP2             = 2,
-    MODE_CAP_MAX              = 3  // Define a maximum value, for looping through the enum
-} sensor_cap_mode_t;
-
-#define ADCS_DIFFERENTIAL     0xE0 // CIN2, DIFF=1 (differential capacitance only)
-#define ADCS_CAP1             0x80 // CIN1, DIFF=0 (capacitor 1 only)
-#define ADCS_CAP2             0xC0 // CIN2, DIFF=0 (capacitor 2 only)
-
-/* ----------------------------------------------------------------------------- */
-/* Capacitance conversion times selection */
-typedef enum {
-    CONVERT_TIME_109MS        = 0, // Default
-    CONVERT_TIME_38MS         = 1,
-    CONVERT_TIME_11MS         = 2
-} sensor_conversion_time_t;
-
-// Configuration register (spec page 18)
-// Bit 7: VTF1
-// Bit 6: VTF0   (00 = default digital filter setup)
-// Bit 5: CAPF2
-// Bit 4: CAPF1
-// Bit 3: CAPF0  (001 = 11.9ms conversion time, 011 = 38.0ms, 111 = 109.6ms)
-// Bit 2: MD2
-// Bit 1: MD1
-// Bit 0: MD0    (010 = single conversion, 000 = idle)
-#define AD7746_CFG_REG        0x0A
-#define ADCT_11MS_SINGLE      0b00001010 // 0x0A = 11ms single
-#define ADCT_38MS_SINGLE      0b00011010 // 0x1A = 38ms single
-#define ADCT_109MS_SINGLE     0b00111010 // 0x3A = 109.6ms single
-#define ADCT_109MS_CONT       0b00111001
-#define ADCT_109MS_IDLE       0b00111000 // 0x38 = 109.6ms, IDLE
 
 
 /*

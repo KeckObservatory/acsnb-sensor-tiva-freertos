@@ -38,7 +38,7 @@ bool I2CMasterTimeout(uint32_t ui32Base) {
 void I2CInit(sensor_name_t sensor) {
 
     uint8_t i;
-    volatile uint32_t ui32Loop;
+    volatile uint32_t loop;
 
     uint32_t peripheral = sensor_io[sensor].peripheral;
     uint32_t periph_base = sensor_io[sensor].periph_base;
@@ -74,14 +74,20 @@ void I2CInit(sensor_name_t sensor) {
      *
      * This can and will eventually occur when a sensor is hot plugged!
      */
+
+    /* Disable the I2C bus, we're about to rip its I/O lines away */
+    SysCtlPeripheralDisable(peripheral);
+
+    /* Set the clock pin up as an output */
     GPIOPinTypeGPIOOutput(port_base, scl_pin);
+
+    /* Strobe 10 clock cycles out to it */
     for (i = 0; i < 10; i++) {
         GPIOPinWrite(port_base, scl_pin, 0);
-        for(ui32Loop = 0; ui32Loop < 100000; ui32Loop++) {}
+        for (loop = 0; loop < 100000; loop++) {}
 
         GPIOPinWrite(port_base, scl_pin, scl_pin);
-        for(ui32Loop = 0; ui32Loop < 100000; ui32Loop++) {}
-
+        for (loop = 0; loop < 100000; loop++) {}
     }
 
     /* Enable the I2C peripheral */
@@ -127,7 +133,8 @@ void I2CInit(sensor_name_t sensor) {
     /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
      * conversion on enabled channel(s) has been finished and the new data is available.
      */
-    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_FALLING_EDGE);
+    //GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_FALLING_EDGE);
+    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_RISING_EDGE);
     GPIOIntEnable(rdy_port, rdy_pin);
 
     /* Clear the ready flag for the device */

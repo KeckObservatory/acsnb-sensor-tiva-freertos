@@ -340,7 +340,7 @@ bool Sensor_Init(sensor_name_t sensor) {
 
     /* Configure capacitance measurement to default (differential) */
     buf[0] = AD7746_CAP_SETUP_REG;
-    buf[1] = ADCS_DIFFERENTIAL;
+    buf[1] = AD7746_CAP_DIFFERENTIAL;
     result = I2CSend(base, AD7746_ADDR, buf, 2);
     if (result < 0) return false;
 
@@ -361,16 +361,16 @@ bool Sensor_Init(sensor_name_t sensor) {
     switch (sensor_control[sensor].conversion_time) {
 
         case CONVERT_TIME_38MS:
-            buf[1] = ADCT_38MS_SINGLE;
+            buf[1] = AD7746_CFG_38MS_SINGLE;
             break;
 
         case CONVERT_TIME_11MS:
-            buf[1] = ADCT_11MS_SINGLE;
+            buf[1] = AD7746_CFG_11MS_SINGLE;
             break;
 
         case CONVERT_TIME_109MS:
         default:
-            buf[1] = ADCT_109MS_SINGLE;
+            buf[1] = AD7746_CFG_109MS_SINGLE;
             break;
     }
     result = I2CSend(base, AD7746_ADDR, buf, 2);
@@ -394,40 +394,25 @@ bool Sensor_Trigger(sensor_name_t sensor) {
 
     /* Configure capacitance measurement to default (differential) */
     buf[0] = AD7746_CAP_SETUP_REG;
-    buf[1] = ADCS_DIFFERENTIAL;
+    buf[1] = AD7746_CAP_DIFFERENTIAL;
     result = I2CSend(base, AD7746_ADDR, buf, 2);
     if (result < 0) return false;
 
-    /* Configure capacitance measurement to default (differential) */
-    /*
-    buf[0] = AD7746_CFG_REG;
-    buf[1] = ADCT_109MS_IDLE;
-    result = I2CSend(base, AD7746_ADDR, buf, 2);
-    if (result < 0) return false;
-    */
-
-    /*
-    buf[0] = AD7746_CFG_REG;
-    buf[1] = ADCT_109MS_CONT;
-    result = I2CSend(base, AD7746_ADDR, buf, 2);
-    if (result < 0) return false;
-     */
-
-    /* Configure capacitance measurement to default (differential) */
+    /* Configure capacitance timing */
     buf[0] = AD7746_CFG_REG;
     switch (sensor_control[sensor].conversion_time) {
 
         case CONVERT_TIME_38MS:
-            buf[1] = ADCT_38MS_SINGLE;
+            buf[1] = AD7746_CFG_38MS_SINGLE;
             break;
 
         case CONVERT_TIME_11MS:
-            buf[1] = ADCT_11MS_SINGLE;
+            buf[1] = AD7746_CFG_11MS_SINGLE;
             break;
 
         case CONVERT_TIME_109MS:
         default:
-            buf[1] = ADCT_109MS_SINGLE;
+            buf[1] = AD7746_CFG_109MS_SINGLE;
             break;
     }
     result = I2CSend(base, AD7746_ADDR, buf, 2);
@@ -553,16 +538,6 @@ void Sensor_Process(sensor_name_t sensor) {
     }
 
 }
-
-
-
-
-
-
-
-
-
-
 
 
 /* -----------------------------------------------------------------------------
