@@ -15,6 +15,66 @@
 #define SSI_ITEM_SIZE           sizeof(uint8_t)
 #define SSI_QUEUE_SIZE          5
 
+
+/* -----------------------------------------------------------------------------
+ * Prepares the next message back to the Beaglebone.
+ */
+void SSI_Load_Message(void) {
+
+    uint8_t i;
+    uint8_t checksum;
+    bool result = (bool) pdTRUE;
+
+    /* Lock the structure with the message, by taking the semaphore
+       but do not wait forever */
+    result = xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY);
+
+    if (result) {
+
+        /* We got the lock and can now work on the buffers */
+
+        /* Copy the received message so it can be parsed */
+        memcpy(rx_message.buf, rx_message_in.buf, SSI_MESSAGE_LENGTH);
+
+        /* Create the header for the outbound message */
+        tx_message.msg.size = SSI_MESSAGE_LENGTH;
+        tx_message.msg.version0 = FIRMWARE_REV_0;
+        tx_message.msg.version1 = FIRMWARE_REV_1;
+        tx_message.msg.version2 = FIRMWARE_REV_2;
+
+        /* Update the RTOS tick value for the next outbound message, as
+         * a heartbeat function. */
+        tx_message.msg.tick_count = xTaskGetTickCount();
+
+
+        //OTHER STUFF
+
+        /* Start with a checksum of 0 before we calculate the real value, so
+         * as to not affect the calculation! */
+        tx_message.msg.checksum = 0;
+
+        /* Set the checksum in the outbound message */
+        for (i = 0, checksum = 0; i < SSI_MESSAGE_LENGTH; i++)
+            checksum += tx_message.buf[i];
+
+        /* Take the 2's complement of the sum and put it back in the message */
+        tx_message.msg.checksum = ~checksum + 1;
+
+        /* Copy the next outbound message to the storage the SSI+DMA will
+         * use to transmit it */
+        memcpy(tx_message_out.buf, tx_message.buf, SSI_MESSAGE_LENGTH);
+
+        /* Release the semaphore */
+        xSemaphoreGive(g_txMessageSemaphore);
+    }
+
+    /* If the semaphore is not obtained, something terrible has happened; in
+     * that case the heartbeat will not be updating and the Beaglebone code
+     * will determine the course of action to recover, probably by power
+     * cyling the TIVA. */
+}
+
+
 /* -----------------------------------------------------------------------------
  * SSI RTOS task main loop.  This task handles the SSI interface back to the
  * Beaglebone.
@@ -23,31 +83,44 @@
  */
 static void SSI_Task(void *pvParameters) {
 
-    portTickType ui32WakeTime;
-    uint32_t ssiTaskDelay;
+    portTickType wake_time;
+    uint32_t host_timer;
+    bool refresh = false;
 
-    ssiTaskDelay = 10;
+    /* Delay 10ms per execution of the loop */
+    uint32_t task_delay = 10;
 
-    // Get the current tick count.
-    ui32WakeTime = xTaskGetTickCount();
+    /* Get the current tick count */
+    wake_time = xTaskGetTickCount();
 
-    // Loop forever.
+    /* Loop forever */
     while (1) {
 
+        /* Time how long it's been since the Beaglebone talked to us */
+        host_timer += task_delay;
+
+        if (host_timer > 1000) {
+
+            /* Force a fresh message for the SPI */
+            refresh = true;
+            host_timer = 0;
+        }
+
         /* Message has been received, prep the next one */
-        if (rxMessageReady) {
+        //if (rxtx_message_ready || refresh) {
+        if (refresh) {
 
+            refresh = false;
+
+            /* Load the next message */
+            SSI_Load_Message();
+
+            /* Clear the message ready flag */
+            rxtx_message_ready = false;
         }
 
-        if (rxMessageReady) {
-
-            rxMessageReady = false;
-            //SSI0sent = false;
-            //SSI0SendMessage();
-        }
-
-        // Wait for the required amount of time.
-        vTaskDelayUntil(&ui32WakeTime, ssiTaskDelay / portTICK_RATE_MS);
+        /* Wait for the required amount of time */
+        vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
     }
 }
 
@@ -56,24 +129,14 @@ static void SSI_Task(void *pvParameters) {
  */
 uint32_t SSI_Task_Init(void) {
 
-    uint8_t i;
+    /* Start off without a message ready to process */
+    rxtx_message_ready = false;
 
-    txMessage.buf[0] = 0xAA;
-    txMessage.buf[1] = 0x55;
-
-    for (i = 2; i < TX_MESSAGE_LENGTH; i++) {
-        txMessage.buf[i] = i;
-    }
-
-    for (i = 0; i < TX_MESSAGE_LENGTH; i++) {
-        rxMessage.buf[i] = 0x11;
-    }
-
-
-    txMessageReady = true;
+    /* Load the first message, basically just the version info and tick count */
+    SSI_Load_Message();
 
     /* Init the SSI0 device for DMA usage */
-    SSI0Init(rxMessage.buf, txMessage.buf, TX_MESSAGE_LENGTH);
+    SSI0Init(rx_message.buf, tx_message_out.buf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
 
     /* Enable the uDMA controller error interrupt.  This interrupt will occur
        if there is a bus error during a transfer */

@@ -24,7 +24,7 @@
  * Function prototypes
  */
 EXTERN void SSI0SlaveSelectIntHandler(void);
-EXTERN void SSI0Init(uint8_t RxBuffer[], uint8_t TxBuffer[], uint16_t length);
+EXTERN void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint16_t length, bool *msg_ready);
 EXTERN void SSI0Interrupt(void);
 EXTERN void SSI0SendMessage(void);
 EXTERN void SSI0InitTransfer(void);

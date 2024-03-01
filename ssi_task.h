@@ -38,7 +38,70 @@ uint8_t pui8ControlTable[1024];
  * -----------------------------------------------------------------------------
  */
 
-// Message from the Beaglebone to the TIVA
+/* Message from the TIVA up to the Beaglebone */
+typedef struct {
+
+    /* 5 bytes of Header information first */
+    uint8_t checksum;
+    uint8_t size;
+    uint8_t version0;
+    uint8_t version1;
+    uint8_t version2;
+
+    /* 4 bytes of the current RTOS tick count that equates to a heartbeat */
+    uint32_t tick_count;
+
+    struct {
+        /* [0] Status of the AD7746 sensor */
+        uint8_t sensor_connected;
+
+        /* [1] Status of the temp/humidity sensing device */
+        uint8_t th_connected;
+
+        /* [2,3] Temperature */
+        uint8_t temp_high;
+        uint8_t temp_low;
+
+        /* [4,5] Humidity */
+        uint8_t humidity_high;
+        uint8_t humidity_low;
+
+        /* [6,7,8] Differential capacitance, a 24 bit value */
+        uint8_t diff_cap_high;
+        uint8_t diff_cap_mid;
+        uint8_t diff_cap_low;
+
+        /* [9,10,11] C1 cap single capacitance */
+        uint8_t c1_high;
+        uint8_t c1_mid;
+        uint8_t c1_low;
+
+        /* [12,13,14] C2 cap single capacitance */
+        uint8_t c2_high;
+        uint8_t c2_mid;
+        uint8_t c2_low;
+
+        /* [15,16,17] On-chip temperature from the capacitance sensor */
+        uint8_t chip_temp_high;
+        uint8_t chip_temp_mid;
+        uint8_t chip_temp_low;
+
+    } sensor[MAX_SENSORS];
+
+} __attribute__((packed)) tx_message_t;
+
+/* Message is 5+4+(6*18) = 117 bytes long */
+#define SSI_MESSAGE_LENGTH sizeof(tx_message_t)
+
+/* Wrap the message with an array of bytes */
+EXTERN union {
+    uint8_t      buf[SSI_MESSAGE_LENGTH];
+    tx_message_t msg;
+} tx_message, tx_message_out;
+
+
+
+/* Message from the Beaglebone to the TIVA */
 typedef struct {
 
     /* First 4 bytes are used for commanding the device */
@@ -48,78 +111,18 @@ typedef struct {
     uint8_t cmd3;
 
     /* Subsequent bytes are for settings that are broadcast every messaging cycle */
-    uint8_t useFastConversionTime;
+    uint8_t use_fast_conversion_time;
 
-} __attribute__((packed)) rxMessage_t;
+} __attribute__((packed)) rx_message_t;
 
-/* Wrap the message with an array of bytes */
+/* Wrap the message with an array of bytes sized to equate to the transmit message,
+ * as the received bytes will be the same length as the sent */
 EXTERN union {
-    uint8_t     buf[5 + (MAX_SENSORS * 19)];
-    rxMessage_t msg;
-} rxMessage;
+    uint8_t      buf[SSI_MESSAGE_LENGTH];
+    rx_message_t msg;
+} rx_message, rx_message_in;
 
-#define RX_MESSAGE_LENGTH sizeof(rxMessage)
-
-// Message from the TIVA up to the Beaglebone
-typedef struct {
-
-    // 5 bytes of Header information first
-    uint8_t checksum;
-    uint8_t version0;
-    uint8_t version1;
-    uint8_t version2;
-    uint8_t size;
-
-    struct {
-        // [0] Status of the sensor
-        uint8_t connected;
-
-        // [1] I2C bus fault enum value, if any
-        uint8_t i2c_bus_fault;
-
-        // [2,3] Temperature
-        uint8_t tempHigh;
-        uint8_t tempLow;
-
-        // [4,5] Humidity
-        uint8_t humidityHigh;
-        uint8_t humidityLow;
-
-        // [6,7,8] Differential capacitance, a 24 bit value
-        uint8_t diffCapHigh;
-        uint8_t diffCapMid;
-        uint8_t diffCapLow;
-
-        // [9,10,11] C1 cap single capacitance
-        uint8_t c1High;
-        uint8_t c1Mid;
-        uint8_t c1Low;
-
-        // [12,13,14] C2 cap single capacitance
-        uint8_t c2High;
-        uint8_t c2Mid;
-        uint8_t c2Low;
-
-        // [15,16,17] On-chip temperature from the capacitance sensor
-        uint8_t chiptempHigh;
-        uint8_t chiptempMid;
-        uint8_t chiptempLow;
-
-    } sensor[MAX_SENSORS];
-
-} __attribute__((packed)) txMessage_t;
-
-/* Wrap the message with an array of bytes */
-EXTERN union {
-    uint8_t     buf[5 + (MAX_SENSORS * 19)];
-    txMessage_t msg;
-} txMessage;
-
-#define TX_MESSAGE_LENGTH sizeof(txMessage)
-
-
-EXTERN bool rxMessageReady;
-EXTERN bool txMessageReady;
+EXTERN bool rxtx_message_ready;
 
 
 

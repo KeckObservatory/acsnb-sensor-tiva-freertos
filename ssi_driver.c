@@ -14,19 +14,21 @@
 /* Variables and pointers used */
 static uint8_t *SSI0_RxPointer;
 static uint8_t *SSI0_TxPointer;
+static bool *SSI0_msg_ready;
 
 static uint16_t dataLength;
 
 /* -----------------------------------------------------------------------------
  * Initialize the SSI0 device.
  */
-void SSI0Init(uint8_t RxBuffer[], uint8_t TxBuffer[], uint16_t length) {
+void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint16_t length, bool *msg_ready) {
 
     uint32_t trashBin[1] = {0};
 
     /* Initialize flags for receiving message */
-    SSI0_RxPointer = &RxBuffer[0];
-    SSI0_TxPointer = &TxBuffer[0];
+    SSI0_RxPointer = &rx_buffer[0];
+    SSI0_TxPointer = &tx_buffer[0];
+    SSI0_msg_ready = msg_ready;
 
     dataLength = length;
 
@@ -94,7 +96,7 @@ void SSI0SlaveSelectIntHandler(void) {
     SSIDMAEnable(SSI0_BASE, SSI_DMA_RX | SSI_DMA_TX);
 
     /* Set the flag that the message has been received */
-    rxMessageReady = true;
+    *SSI0_msg_ready = true;
 }
 
 
