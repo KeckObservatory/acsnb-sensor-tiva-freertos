@@ -23,13 +23,10 @@ void SSI_Load_Message(void) {
 
     uint8_t i;
     uint8_t checksum;
-    bool result = (bool) pdTRUE;
 
     /* Lock the structure with the message, by taking the semaphore
        but do not wait forever */
-    result = xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY);
-
-    if (result) {
+    if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
 
         /* We got the lock and can now work on the buffers */
 
@@ -84,8 +81,9 @@ void SSI_Load_Message(void) {
 static void SSI_Task(void *pvParameters) {
 
     portTickType wake_time;
-    uint32_t host_timer;
+    uint32_t host_timer = 0;
     bool refresh = false;
+    volatile uint32_t now = 0;
 
     /* Delay 10ms per execution of the loop */
     uint32_t task_delay = 10;
@@ -95,6 +93,8 @@ static void SSI_Task(void *pvParameters) {
 
     /* Loop forever */
     while (1) {
+
+        now = xTaskGetTickCount();
 
         /* Time how long it's been since the Beaglebone talked to us */
         host_timer += task_delay;
@@ -107,8 +107,7 @@ static void SSI_Task(void *pvParameters) {
         }
 
         /* Message has been received, prep the next one */
-        //if (rxtx_message_ready || refresh) {
-        if (refresh) {
+        if (rxtx_message_ready || refresh) {
 
             refresh = false;
 

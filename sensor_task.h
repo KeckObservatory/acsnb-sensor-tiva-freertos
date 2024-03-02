@@ -129,24 +129,15 @@
  * Bit 0: MD0    (010 = single conversion, 000 = idle)
  */
 #define AD7746_CFG_REG            0x0A
-#define AD7746_CFG_11MS_SINGLE    0b00001010 // 0x0A = 11ms single
-#define AD7746_CFG_38MS_SINGLE    0b00011010 // 0x1A = 38ms single
-#define AD7746_CFG_109MS_SINGLE   0b00111010 // 0x3A = 109.6ms single
+#define AD7746_CFG_C_11MS_SINGLE  0b00001010 // 0x0A = 11ms single cap convert
+#define AD7746_CFG_C_38MS_SINGLE  0b00011010 // 0x1A = 38ms single cap convert
+#define AD7746_CFG_C_109MS_SINGLE 0b00111010 // 0x3A = 109.6ms single cap convert
+#define AD7746_CFG_T_20MS_SINGLE  0b00000010 // 0x02 = 20ms single temp convert
+#define AD7746_CFG_T_32MS_SINGLE  0b01000010 // 0x42 = 32ms single temp convert
+#define AD7746_CFG_T_62MS_SINGLE  0b10000010 // 0x82 = 62ms single temp convert
 
-
-
-/* Temperature conversion time selections (spec page 18) */
-typedef enum {
-
-  adtct20msSingle               = 0b00000010, // 20ms single conversion
-  adtct32msSingle               = 0b01000010, // 32ms single conversion
-  adtct62msSingle               = 0b10000010, // 62ms single conversion
-  adtct122msSingle              = 0b11000010  // 122ms single conversion
-
-} adTemperatureConversionTime;
-#define DEFAULT_TEMPERATURE_CONVERSION_TIME adtct32msSingle
-#define AD7746_CAP_VS_TEMP_TRIGGER_INTERVAL 10   // Trigger one temperature read every 10 cap reads
-
+#define AD7746_CFG_T_DEFAULT      AD7746_CFG_T_32MS_SINGLE
+#define AD7746_TEMP_TRIGGER_RATE  10   // Trigger one temperature read every 10 cap reads
 
 
 
@@ -168,9 +159,14 @@ typedef enum {
     STATE_INIT                  = 1,
     STATE_INIT_FAILED           = 2,
     STATE_INIT_FAILED_WAIT      = 3,
-    STATE_TRIGGER               = 4,
-    STATE_TRIGGER_WAIT          = 5,
-    STATE_FAULTED               = 6
+    STATE_TRIGGER_DIFFERENTIAL  = 4,
+    STATE_TRIGGER_C1            = 5,
+    STATE_TRIGGER_C2            = 6,
+    STATE_TRIGGER_CAP_WAIT      = 7,
+    STATE_TRIGGER_TEMPERATURE   = 8,
+    STATE_TRIGGER_TEMP_WAIT     = 9,
+    STATE_FAULTED               = 10,
+    STATE_MAX
 } sensor_state_t;
 
 /* ----------------------------------------------------------------------------- */
@@ -181,13 +177,13 @@ typedef enum {
 } sensor_relay_position_t;
 
 /* ----------------------------------------------------------------------------- */
-/* Single / differential capacitance selection choices */
+/* Single / differential capacitance, or temperature, selection choices */
 typedef enum {
-    MODE_CAP_DIFFERENTIAL       = 0,
-    MODE_CAP_CAP1               = 1,
-    MODE_CAP_CAP2               = 2,
-    MODE_CAP_MAX                = 3  // Define a maximum value, for looping through the enum
-} sensor_cap_mode_t;
+    MODE_C_DIFFERENTIAL       = 0,
+    MODE_C_CAP1               = 1,
+    MODE_C_CAP2               = 2,
+    MODE_TEMPERATURE          = 3
+} sensor_mode_t;
 
 /* ----------------------------------------------------------------------------- */
 /* Capacitance conversion times selection */
@@ -241,11 +237,19 @@ typedef struct {
     /* Sensor switching */
     sensor_relay_position_t   relay_position;
 
-    /* Capacitor selection */
-    sensor_cap_mode_t         cap_mode;
+    /* Capacitor/temperature selection mode */
+    sensor_mode_t             mode;
+
+    /* Flag that enables retrieving single-ended caps alongside differential;
+     * used only for debugging because it runs the differential cap retrieval
+     * at one third the usual sampling rate. */
+    bool                      enable_c1_c2;
 
     /* Capacitor conversion time */
     sensor_conversion_time_t  conversion_time;
+
+    /* Capacitor conversion cycles, used to interleave temperature measurements */
+    uint8_t                   conversions;
 
 } sensor_control_t;
 
@@ -260,7 +264,8 @@ EXTERN sensor_control_t sensor_control[MAX_SENSORS];
 
 EXTERN bool Sensor_Reset(sensor_name_t sensor);
 EXTERN bool Sensor_Init(sensor_name_t sensor);
-EXTERN bool Sensor_Trigger(sensor_name_t sensor);
+EXTERN bool Sensor_Trigger(sensor_name_t sensor, sensor_mode_t cap_mode);
+EXTERN bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode);
 EXTERN void Sensor_Process(sensor_name_t sensor);
 EXTERN uint32_t Sensor_Task_Init(void);
 

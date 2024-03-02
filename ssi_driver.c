@@ -116,7 +116,7 @@ void SSI0IntHandler(void) {
 
     /* Block below is commented out for now.  This part is done in the
      * interrupt handler for the chip select.  Regardless of whether the DMA
-     * is done or not, we are going to re-start it! */
+     * is done or not, we are going to re-start it, over in that routine! */
 #ifdef ZERO
     ui32Mode = uDMAChannelModeGet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT);
 

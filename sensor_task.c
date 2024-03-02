@@ -361,16 +361,16 @@ bool Sensor_Init(sensor_name_t sensor) {
     switch (sensor_control[sensor].conversion_time) {
 
         case CONVERT_TIME_38MS:
-            buf[1] = AD7746_CFG_38MS_SINGLE;
+            buf[1] = AD7746_CFG_C_38MS_SINGLE;
             break;
 
         case CONVERT_TIME_11MS:
-            buf[1] = AD7746_CFG_11MS_SINGLE;
+            buf[1] = AD7746_CFG_C_11MS_SINGLE;
             break;
 
         case CONVERT_TIME_109MS:
         default:
-            buf[1] = AD7746_CFG_109MS_SINGLE;
+            buf[1] = AD7746_CFG_C_109MS_SINGLE;
             break;
     }
     result = I2CSend(base, AD7746_ADDR, buf, 2);
@@ -386,53 +386,72 @@ bool Sensor_Init(sensor_name_t sensor) {
  * Trigger a capacitance sensor conversion.
  */
 
-bool Sensor_Trigger(sensor_name_t sensor) {
+bool Sensor_Trigger(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
     int8_t result;
     uint8_t buf[2];
     uint32_t base = sensor_io[sensor].periph_base;
 
-    /* Configure capacitance measurement to default (differential) */
-    buf[0] = AD7746_CAP_SETUP_REG;
-    buf[1] = AD7746_CAP_DIFFERENTIAL;
-    result = I2CSend(base, AD7746_ADDR, buf, 2);
-    if (result < 0) return false;
+    /* Configure capacitance or temperature measurement */
+    switch (cap_mode) {
 
-    /* Configure capacitance timing */
-    buf[0] = AD7746_CFG_REG;
-    switch (sensor_control[sensor].conversion_time) {
+        case MODE_C_DIFFERENTIAL:
+        case MODE_C_CAP1:
+        case MODE_C_CAP2:
+            /* Configure which capacitor to sample */
+            buf[0] = AD7746_CAP_SETUP_REG;
 
-        case CONVERT_TIME_38MS:
-            buf[1] = AD7746_CFG_38MS_SINGLE;
+            /* Differential will be the mode, almost always! */
+            buf[1] = AD7746_CAP_DIFFERENTIAL;
+
+            /* But check for alternate modes used during testing... */
+            if (cap_mode == MODE_C_CAP1) {
+                buf[1] = AD7746_CAP_CAP1;
+            } else if (cap_mode == MODE_C_CAP2) {
+                buf[1] = AD7746_CAP_CAP2;
+            }
+
+            result = I2CSend(base, AD7746_ADDR, buf, 2);
+            if (result < 0) return false;
+
+            /* Configure capacitance timing */
+            buf[0] = AD7746_CFG_REG;
+            switch (sensor_control[sensor].conversion_time) {
+
+                case CONVERT_TIME_38MS:
+                    buf[1] = AD7746_CFG_C_38MS_SINGLE;
+                    break;
+
+                case CONVERT_TIME_11MS:
+                    buf[1] = AD7746_CFG_C_11MS_SINGLE;
+                    break;
+
+                case CONVERT_TIME_109MS:
+                default:
+                    buf[1] = AD7746_CFG_C_109MS_SINGLE;
+                    break;
+            }
+            result = I2CSend(base, AD7746_ADDR, buf, 2);
+            if (result < 0) return false;
+
             break;
 
-        case CONVERT_TIME_11MS:
-            buf[1] = AD7746_CFG_11MS_SINGLE;
+        case MODE_TEMPERATURE:
+
+            /* Build message to device: set conversion time and trigger conversion */
+            buf[0] = AD7746_CFG_REG;
+            buf[1] = AD7746_CFG_T_DEFAULT; /* Default to 32ms temperature conversion time */
+            result = I2CSend(base, AD7746_ADDR, buf, 2);
+            if (result < 0) return false;
+
             break;
 
-        case CONVERT_TIME_109MS:
         default:
-            buf[1] = AD7746_CFG_109MS_SINGLE;
-            break;
+            /* There is no default conversion, something got messed up! */
+            return false;
     }
-    result = I2CSend(base, AD7746_ADDR, buf, 2);
-    if (result < 0) return false;
-
-    //TODO: Probably don't need this since it gets enabled above?
-    /* Build message to device, read the temperature */
-    /*
-    txBuffer[0] = AD7746_VT_SETUP_REG;
-    txBuffer[1] = AD7746_VT_SETUP_INT_TEMP;
-
-    if (!I2C_transfer(i2c, &i2cTransaction)) {
-      System_printf("(%d) Error in AD7746 trigger (temperature enable) of AD7746.\n", device);
-      System_flush();
-      return -1;
-    }
-    */
 
     return true;
-
 }
 
 
@@ -440,20 +459,65 @@ bool Sensor_Trigger(sensor_name_t sensor) {
 /* -----------------------------------------------------------------------------
  * Read a capacitance sensor value.
  */
-bool Sensor_Read(sensor_name_t sensor) {
+bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
-    int8_t result;
+    int8_t i2c_result;
     uint8_t buf[8];
     uint32_t base = sensor_io[sensor].periph_base;
 
-    /* Configure capacitance measurement to default (differential) */
-    //result = I2CReceive2(base, AD7746_ADDR, AD7746_READ, buf, 6); // 3 bytes for cap only, 6 for cap and temp (see spec page 14)
+    /* Read the capacitance and temperature conversion results,
+     * 3 bytes each (see spec page 14).  Read it all every time to keep
+     * this routine simple! */
+    i2c_result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 6);
+    if (i2c_result < 0) return false;
 
-    //result = I2CReceive(base, AD7746_ADDR, AD7746_STATUS_REG, buf, 8); // 3 bytes for cap only, 6 for cap and temp (see spec page 14)
-    result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 6); // 3 bytes for cap only, 6 for cap and temp (see spec page 14)
+    /* Lock the structure with the message, by taking the semaphore
+       but do not wait forever */
+    if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
 
+        /* We got the lock and can now work with the message exclusively
+         * to update the outgoing message with the new values */
 
-    if (result < 0) return false;
+        /* What read mode resulted in this value? */
+        switch(cap_mode) {
+
+          /* Differential capacitor value */
+          case MODE_C_DIFFERENTIAL:
+              tx_message.msg.sensor[sensor].diff_cap_high = buf[0];
+              tx_message.msg.sensor[sensor].diff_cap_mid  = buf[1];
+              tx_message.msg.sensor[sensor].diff_cap_low  = buf[2];
+              break;
+
+          /* Single C1 value */
+          case MODE_C_CAP1:
+              tx_message.msg.sensor[sensor].c1_high = buf[0];
+              tx_message.msg.sensor[sensor].c1_mid  = buf[1];
+              tx_message.msg.sensor[sensor].c1_low  = buf[2];
+              break;
+
+          /* Single C2 value */
+          case MODE_C_CAP2:
+              tx_message.msg.sensor[sensor].c2_high = buf[0];
+              tx_message.msg.sensor[sensor].c2_mid  = buf[1];
+              tx_message.msg.sensor[sensor].c2_low  = buf[2];
+              break;
+
+          /* Temperature conversion */
+          case MODE_TEMPERATURE:
+              tx_message.msg.sensor[sensor].chip_temp_high = buf[3];
+              tx_message.msg.sensor[sensor].chip_temp_mid  = buf[4];
+              tx_message.msg.sensor[sensor].chip_temp_low  = buf[5];
+              break;
+
+          /* No default applies to this switch block */
+          default:
+              break;
+
+        }
+
+        /* Release the semaphore */
+        xSemaphoreGive(g_txMessageSemaphore);
+    }
 
     /* If we got this far, read was successful */
     return true;
@@ -466,22 +530,33 @@ bool Sensor_Read(sensor_name_t sensor) {
 void Sensor_Process(sensor_name_t sensor) {
 
     bool result = false;
+    static uint32_t state_start_tick = 0;
+    uint32_t now = 0;
+    uint32_t elapsed = 0;
 
     /* Get the values used to drive the state machine from the control structure */
-    sensor_state_t *state = &(sensor_control[sensor].state);
+    sensor_state_t *p_state = &(sensor_control[sensor].state);
+    sensor_mode_t *p_mode = &(sensor_control[sensor].mode);
+    uint8_t *p_conversions = &(sensor_control[sensor].conversions);
 
-    uint32_t init_wait = sensor_control[sensor].init_wait;
-    sensor_relay_position_t relay_position = sensor_control[sensor].relay_position;
-    sensor_cap_mode_t cap_mode = sensor_control[sensor].cap_mode;
-    sensor_conversion_time_t conversion_time = sensor_control[sensor].conversion_time;
+    bool enable_c1_c2 = sensor_control[sensor].enable_c1_c2;
 
 
-    switch (*state) {
+    //uint32_t init_wait = sensor_control[sensor].init_wait;
+    //sensor_relay_position_t relay_position = sensor_control[sensor].relay_position;
+    //sensor_cap_mode_t cap_mode = sensor_control[sensor].cap_mode;
+    //sensor_conversion_time_t conversion_time = sensor_control[sensor].conversion_time;
+
+
+    /* Get the current time for calculating timeouts */
+    now = xTaskGetTickCount();
+
+    switch (*p_state) {
 
         /* Power-on-reset state; init the devices */
         case STATE_POR:
             result = Sensor_Reset(sensor);
-            *state = STATE_INIT;
+            *p_state = STATE_INIT;
             break;
 
         /* */
@@ -490,44 +565,102 @@ void Sensor_Process(sensor_name_t sensor) {
 
             sensor6_ready = false;
 
-            /* Init success, proceed to triggering */
-            *state = STATE_TRIGGER;
+            /* Proceed to triggering */
+            *p_state = STATE_TRIGGER_DIFFERENTIAL;
             break;
 
         /* */
         case STATE_INIT_FAILED:
-
             break;
 
         /* */
         case STATE_INIT_FAILED_WAIT:
-
             break;
 
-        /* Start a new conversion */
-        case STATE_TRIGGER:
+        /* Start a new capacitance conversion */
+        case STATE_TRIGGER_DIFFERENTIAL:
 
             /* Clear the ready flag for the next read */
             sensor6_ready = false;
 
+            /* Set the mode to differential capture */
+            *p_mode = MODE_C_DIFFERENTIAL;
+
             /* Tell the device to start conversion */
-            Sensor_Trigger(sensor);
+            Sensor_Trigger(sensor, *p_mode);
 
             /* Advance to the next state to await the conversion result, or time out */
-            *state = STATE_TRIGGER_WAIT;
+            *p_state = STATE_TRIGGER_CAP_WAIT;
+
+            /* Start timing the wait state */
+            state_start_tick = xTaskGetTickCount();
             break;
 
         /* Await the ready flag */
-        case STATE_TRIGGER_WAIT:
-            /* Did the sensor trigger since last invocation of the state machine? */
-            if (sensor6_ready) {
-                Sensor_Read(sensor);
+        case STATE_TRIGGER_CAP_WAIT:
 
-                *state = STATE_TRIGGER;
+            /* Check for timeout after 1 second */
+            elapsed = now - state_start_tick;
+            if (elapsed > 1000) {
+                *p_state = STATE_POR;
+                return;
             }
 
-            /* Is the conversion complete? */
+            /* Did the conversion complete since last invocation of the state machine? */
+            if (sensor6_ready) {
+                Sensor_Read(sensor, *p_mode);
+
+                /* Count how many differential conversions */
+                *p_conversions += 1;
+                if (*p_conversions < AD7746_TEMP_TRIGGER_RATE) {
+                    *p_state = STATE_TRIGGER_DIFFERENTIAL;
+                } else {
+                    *p_state = STATE_TRIGGER_TEMPERATURE;
+                }
+            }
             break;
+
+        /* Start a new temperature conversion */
+        case STATE_TRIGGER_TEMPERATURE:
+
+            /* Clear the ready flag for the next read */
+            sensor6_ready = false;
+
+            /* Reset the conversions count */
+            *p_conversions = 0;
+
+            /* Set the mode to temperature capture */
+            *p_mode = MODE_TEMPERATURE;
+
+            /* Tell the device to start conversion */
+            Sensor_Trigger(sensor, *p_mode);
+
+            /* Advance to the next state to await the conversion result, or time out */
+            *p_state = STATE_TRIGGER_TEMP_WAIT;
+
+            /* Start timing the wait state */
+            state_start_tick = xTaskGetTickCount();
+            break;
+
+        /* Await the ready flag */
+        case STATE_TRIGGER_TEMP_WAIT:
+
+            /* Check for timeout after 1 second */
+            elapsed = now - state_start_tick;
+            if (elapsed > 1000) {
+                *p_state = STATE_POR;
+                return;
+            }
+
+            /* Did the conversion complete since last invocation of the state machine? */
+            if (sensor6_ready) {
+                Sensor_Read(sensor, *p_mode);
+
+                /* Return to converting capacitances */
+                *p_state = STATE_TRIGGER_DIFFERENTIAL;
+            }
+            break;
+
 
 
         /* Device has faulted, restart the init process */
@@ -548,46 +681,32 @@ void Sensor_Process(sensor_name_t sensor) {
  */
 static void Sensor_Task(void *pvParameters) {
 
-    portTickType ui32WakeTime;
+    portTickType wake_time;
     uint32_t sensorTaskDelay;
+    sensor_name_t sensor;
+
     int32_t heartbeatTimer;
-
-    int32_t timer;
-
-    /* Invoke task every 10ms */
-    sensorTaskDelay = 10;
     bool toggle;
 
-    uint8_t vals[6];
+    /* Delay 10ms per execution of the loop */
+    uint32_t task_delay = 10;
 
-    // Get the current tick count.
-    ui32WakeTime = xTaskGetTickCount();
+    /* Get the current tick count */
+    wake_time = xTaskGetTickCount();
 
     // Count down 500ms, 10ms at a time
     heartbeatTimer = 50;
 
-    timer = 20 / sensorTaskDelay;
-
     // Loop forever.
     while (1) {
-
-        sensor_name_t sensor;
 
         /* Run the state machine once for each sensor */
         /*
         for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
             Sensor_Process(sensor);
-
         }*/
 
-        timer--;
-        if (timer < 0) {
-
-            Sensor_Process(SENSOR6);
-
-            timer = 20 / sensorTaskDelay;
-        }
-
+        Sensor_Process(SENSOR6);
 
 #ifdef zero
 
@@ -595,17 +714,6 @@ static void Sensor_Task(void *pvParameters) {
         heartbeatTimer--;
 
         if (heartbeatTimer < 0) {
-
-            /*
-            I2CReceive(sensor_io[SENSOR1].periph_base, AD7746_ADDR, 0xE3, vals, 6);
-            I2CReceive(sensor_io[SENSOR2].periph_base, AD7746_ADDR, 0xE3, vals, 6);
-            I2CReceive(sensor_io[SENSOR3].periph_base, AD7746_ADDR, 0xE3, vals, 6);
-            I2CReceive(sensor_io[SENSOR4].periph_base, AD7746_ADDR, 0xE3, vals, 6);
-            I2CReceive(sensor_io[SENSOR5].periph_base, AD7746_ADDR, 0xE3, vals, 6);
-            */
-            //I2CInit(SENSOR6);
-            //I2CReceive(sensor_io[SENSOR6].periph_base, AD7746_ADDR, AD7746_STATUS_REG, vals, 6);
-
 
             if (toggle) {
                 GPIOPinWrite(GPIO_PORTF_BASE, GPIO_PIN_0, GPIO_PIN_0); // on
@@ -622,7 +730,7 @@ static void Sensor_Task(void *pvParameters) {
 #endif
 
         // Wait for the required amount of time.
-        vTaskDelayUntil(&ui32WakeTime, sensorTaskDelay / portTICK_RATE_MS);
+        vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
     }
 }
 
@@ -640,7 +748,7 @@ uint32_t Sensor_Task_Init(void) {
         sensor_control[sensor].state           = STATE_POR;
         sensor_control[sensor].init_wait       = 0;
         sensor_control[sensor].relay_position  = SWITCH_LBL;
-        sensor_control[sensor].cap_mode        = MODE_CAP_DIFFERENTIAL;
+        sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].conversion_time = CONVERT_TIME_109MS;
 
         /* Initialize the I2C bus for the sensor */

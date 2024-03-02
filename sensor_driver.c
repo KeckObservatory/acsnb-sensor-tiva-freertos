@@ -125,16 +125,13 @@ void I2CInit(sensor_name_t sensor) {
 
     /* Connect an interrupt handler to the ready select pin. */
     GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
-    //GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD_WPU);
-    //GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_OD);
     GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
     GPIOIntRegister(rdy_port, isr);
 
     /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
      * conversion on enabled channel(s) has been finished and the new data is available.
      */
-    //GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_FALLING_EDGE);
-    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_RISING_EDGE); // Per node box schematic, signal is inverted so use the rising edge
     GPIOIntEnable(rdy_port, rdy_pin);
 
     /* Clear the ready flag for the device */
