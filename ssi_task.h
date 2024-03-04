@@ -99,7 +99,9 @@ EXTERN union {
     tx_message_t msg;
 } tx_message, tx_message_out;
 
-
+/* TODO: this is a bit of a hack to double buffer the message so the DMA can
+ * send it without risk of it being changed out from underneath */
+EXTERN uint8_t tx_message_out_dmabuf[SSI_MESSAGE_LENGTH];
 
 /* Message from the Beaglebone to the TIVA */
 typedef struct {

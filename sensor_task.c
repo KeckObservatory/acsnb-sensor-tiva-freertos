@@ -471,8 +471,7 @@ bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
     i2c_result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 6);
     if (i2c_result < 0) return false;
 
-    /* Lock the structure with the message, by taking the semaphore
-       but do not wait forever */
+    /* Lock the structure with the message, by taking the semaphore */
     if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
 
         /* We got the lock and can now work with the message exclusively

@@ -19,13 +19,20 @@
 /* -----------------------------------------------------------------------------
  * Prepares the next message back to the Beaglebone.
  */
-void SSI_Load_Message(void) {
+bool SSI_Load_Message(void) {
 
     uint8_t i;
     uint8_t checksum;
+    uint32_t ssi0_state;
 
-    /* Lock the structure with the message, by taking the semaphore
-       but do not wait forever */
+    /* Is the SSI0 chip select active?  If so, don't attempt to load the next message
+     * if we are in the middle of transmitting it */
+    ssi0_state = GPIOPinRead(GPIO_PORTA_BASE, GPIO_PIN_3);
+    if (ssi0_state == 0) {
+        return false;
+    }
+
+    /* Lock the structure with the message, by taking the semaphore */
     if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
 
         /* We got the lock and can now work on the buffers */
@@ -43,16 +50,14 @@ void SSI_Load_Message(void) {
          * a heartbeat function. */
         tx_message.msg.tick_count = xTaskGetTickCount();
 
-
-        //OTHER STUFF
-
         /* Start with a checksum of 0 before we calculate the real value, so
          * as to not affect the calculation! */
         tx_message.msg.checksum = 0;
 
         /* Set the checksum in the outbound message */
-        for (i = 0, checksum = 0; i < SSI_MESSAGE_LENGTH; i++)
+        for (i = 0, checksum = 0; i < SSI_MESSAGE_LENGTH; i++) {
             checksum += tx_message.buf[i];
+        }
 
         /* Take the 2's complement of the sum and put it back in the message */
         tx_message.msg.checksum = ~checksum + 1;
@@ -68,7 +73,10 @@ void SSI_Load_Message(void) {
     /* If the semaphore is not obtained, something terrible has happened; in
      * that case the heartbeat will not be updating and the Beaglebone code
      * will determine the course of action to recover, probably by power
-     * cyling the TIVA. */
+     * cycling the TIVA. */
+
+    /* If we got this far, everything worked */
+    return true;
 }
 
 
@@ -84,6 +92,7 @@ static void SSI_Task(void *pvParameters) {
     uint32_t host_timer = 0;
     bool refresh = false;
     volatile uint32_t now = 0;
+    bool loaded;
 
     /* Delay 10ms per execution of the loop */
     uint32_t task_delay = 10;
@@ -99,7 +108,7 @@ static void SSI_Task(void *pvParameters) {
         /* Time how long it's been since the Beaglebone talked to us */
         host_timer += task_delay;
 
-        if (host_timer > 1000) {
+        if (host_timer > 2000) {
 
             /* Force a fresh message for the SPI */
             refresh = true;
@@ -109,13 +118,14 @@ static void SSI_Task(void *pvParameters) {
         /* Message has been received, prep the next one */
         if (rxtx_message_ready || refresh) {
 
-            refresh = false;
-
             /* Load the next message */
-            SSI_Load_Message();
+            loaded = SSI_Load_Message();
 
-            /* Clear the message ready flag */
-            rxtx_message_ready = false;
+            /* Clear the message ready flag, but only if we loaded a new message */
+            if (loaded) {
+                refresh = false;
+                rxtx_message_ready = false;
+            }
         }
 
         /* Wait for the required amount of time */
@@ -135,7 +145,8 @@ uint32_t SSI_Task_Init(void) {
     SSI_Load_Message();
 
     /* Init the SSI0 device for DMA usage */
-    SSI0Init(rx_message.buf, tx_message_out.buf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
+    //SSI0Init(rx_message.buf, tx_message_out.buf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
+    SSI0Init(rx_message.buf, tx_message_out_dmabuf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
 
     /* Enable the uDMA controller error interrupt.  This interrupt will occur
        if there is a bus error during a transfer */

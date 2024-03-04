@@ -77,6 +77,9 @@ void SSI0SlaveSelectIntHandler(void) {
     SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
     SSIEnable(SSI0_BASE);
 
+    /* Copy the outbound message to the buffer the DMA will read from */
+    memcpy(SSI0_TxPointer, tx_message_out.buf, SSI_MESSAGE_LENGTH);
+
     /* SSI0 is fully reset.  Drive a new DMA transfer of the buffer */
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
                                UDMA_MODE_BASIC,
