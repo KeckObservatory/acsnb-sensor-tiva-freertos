@@ -101,7 +101,7 @@
  */
 #define AD7746_VT_SETUP_REG       0x08
 #define AD7746_VT_SETUP_DISABLE   0x00
-#define AD7746_VT_SETUP_INT_TEMP  0b10000001 // VTEN=1, VTCHOP=1
+#define AD7746_VT_SETUP_INT_TEMP  0b10000001 // 0x81 = VTEN=1, VTCHOP=1
 
 /* Excitation setup register definitions (spec pg 17)
  * Bit 7: CLKCTRL (0 = default, 1 = decrease frequencies by factor of 2)
@@ -159,13 +159,11 @@ typedef enum {
     STATE_INIT                  = 1,
     STATE_INIT_FAILED           = 2,
     STATE_INIT_FAILED_WAIT      = 3,
-    STATE_TRIGGER_DIFFERENTIAL  = 4,
-    STATE_TRIGGER_C1            = 5,
-    STATE_TRIGGER_C2            = 6,
-    STATE_TRIGGER_CAP_WAIT      = 7,
-    STATE_TRIGGER_TEMPERATURE   = 8,
-    STATE_TRIGGER_TEMP_WAIT     = 9,
-    STATE_FAULTED               = 10,
+    STATE_TRIGGER_CAP           = 4,
+    STATE_TRIGGER_CAP_WAIT      = 5,
+    STATE_TRIGGER_TEMPERATURE   = 6,
+    STATE_TRIGGER_TEMP_WAIT     = 7,
+    STATE_FAULTED               = 8,
     STATE_MAX
 } sensor_state_t;
 

@@ -14,6 +14,7 @@
 /* Variables and pointers used */
 static uint8_t *SSI0_RxPointer;
 static uint8_t *SSI0_TxPointer;
+static uint8_t *SSI0_TXDMAPointer;
 static bool *SSI0_msg_ready;
 
 static uint16_t dataLength;
@@ -21,13 +22,14 @@ static uint16_t dataLength;
 /* -----------------------------------------------------------------------------
  * Initialize the SSI0 device.
  */
-void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint16_t length, bool *msg_ready) {
+void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint8_t tx_dma_buffer[], uint16_t length, bool *msg_ready) {
 
     uint32_t trashBin[1] = {0};
 
     /* Initialize flags for receiving message */
     SSI0_RxPointer = &rx_buffer[0];
     SSI0_TxPointer = &tx_buffer[0];
+    SSI0_TXDMAPointer = &tx_dma_buffer[0];
     SSI0_msg_ready = msg_ready;
 
     dataLength = length;
@@ -78,7 +80,7 @@ void SSI0SlaveSelectIntHandler(void) {
     SSIEnable(SSI0_BASE);
 
     /* Copy the outbound message to the buffer the DMA will read from */
-    memcpy(SSI0_TxPointer, tx_message_out.buf, SSI_MESSAGE_LENGTH);
+    memcpy(SSI0_TXDMAPointer, SSI0_TxPointer, SSI_MESSAGE_LENGTH);
 
     /* SSI0 is fully reset.  Drive a new DMA transfer of the buffer */
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
@@ -90,7 +92,7 @@ void SSI0SlaveSelectIntHandler(void) {
 
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
                                UDMA_MODE_BASIC,
-                               SSI0_TxPointer,
+                               SSI0_TXDMAPointer,
                                (void *)(SSI0_BASE + SSI_O_DR),
                                dataLength);
     uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
@@ -206,7 +208,7 @@ void SSI0InitTransfer(void) {
        data register. */
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
                            UDMA_MODE_BASIC,
-                           SSI0_TxPointer,
+                           SSI0_TXDMAPointer,
                            (void *)(SSI0_BASE + SSI_O_DR),
                            dataLength);
 

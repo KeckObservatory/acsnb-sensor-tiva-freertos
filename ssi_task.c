@@ -145,8 +145,7 @@ uint32_t SSI_Task_Init(void) {
     SSI_Load_Message();
 
     /* Init the SSI0 device for DMA usage */
-    //SSI0Init(rx_message.buf, tx_message_out.buf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
-    SSI0Init(rx_message.buf, tx_message_out_dmabuf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
+    SSI0Init(rx_message.buf, tx_message_out.buf, tx_message_out_dmabuf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
 
     /* Enable the uDMA controller error interrupt.  This interrupt will occur
        if there is a bus error during a transfer */

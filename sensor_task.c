@@ -468,7 +468,7 @@ bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
     /* Read the capacitance and temperature conversion results,
      * 3 bytes each (see spec page 14).  Read it all every time to keep
      * this routine simple! */
-    i2c_result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 6);
+    i2c_result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 7);
     if (i2c_result < 0) return false;
 
     /* Lock the structure with the message, by taking the semaphore */
@@ -482,30 +482,30 @@ bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
           /* Differential capacitor value */
           case MODE_C_DIFFERENTIAL:
-              tx_message.msg.sensor[sensor].diff_cap_high = buf[0];
-              tx_message.msg.sensor[sensor].diff_cap_mid  = buf[1];
-              tx_message.msg.sensor[sensor].diff_cap_low  = buf[2];
+              tx_message.msg.sensor[sensor].diff_cap_high = buf[1];
+              tx_message.msg.sensor[sensor].diff_cap_mid  = buf[2];
+              tx_message.msg.sensor[sensor].diff_cap_low  = buf[3];
               break;
 
           /* Single C1 value */
           case MODE_C_CAP1:
-              tx_message.msg.sensor[sensor].c1_high = buf[0];
-              tx_message.msg.sensor[sensor].c1_mid  = buf[1];
-              tx_message.msg.sensor[sensor].c1_low  = buf[2];
+              tx_message.msg.sensor[sensor].c1_high = buf[1];
+              tx_message.msg.sensor[sensor].c1_mid  = buf[2];
+              tx_message.msg.sensor[sensor].c1_low  = buf[3];
               break;
 
           /* Single C2 value */
           case MODE_C_CAP2:
-              tx_message.msg.sensor[sensor].c2_high = buf[0];
-              tx_message.msg.sensor[sensor].c2_mid  = buf[1];
-              tx_message.msg.sensor[sensor].c2_low  = buf[2];
+              tx_message.msg.sensor[sensor].c2_high = buf[1];
+              tx_message.msg.sensor[sensor].c2_mid  = buf[2];
+              tx_message.msg.sensor[sensor].c2_low  = buf[3];
               break;
 
           /* Temperature conversion */
           case MODE_TEMPERATURE:
-              tx_message.msg.sensor[sensor].chip_temp_high = buf[3];
-              tx_message.msg.sensor[sensor].chip_temp_mid  = buf[4];
-              tx_message.msg.sensor[sensor].chip_temp_low  = buf[5];
+              tx_message.msg.sensor[sensor].chip_temp_high = buf[4];
+              tx_message.msg.sensor[sensor].chip_temp_mid  = buf[5];
+              tx_message.msg.sensor[sensor].chip_temp_low  = buf[6];
               break;
 
           /* No default applies to this switch block */
@@ -532,13 +532,16 @@ void Sensor_Process(sensor_name_t sensor) {
     static uint32_t state_start_tick = 0;
     uint32_t now = 0;
     uint32_t elapsed = 0;
+    static sensor_mode_t next_sensor_mode, last_sensor_mode = MODE_C_DIFFERENTIAL;
 
     /* Get the values used to drive the state machine from the control structure */
     sensor_state_t *p_state = &(sensor_control[sensor].state);
     sensor_mode_t *p_mode = &(sensor_control[sensor].mode);
     uint8_t *p_conversions = &(sensor_control[sensor].conversions);
-
     bool enable_c1_c2 = sensor_control[sensor].enable_c1_c2;
+
+    /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
+    bool *p_ready_flag = sensor_io[sensor].isr_flag;
 
 
     //uint32_t init_wait = sensor_control[sensor].init_wait;
@@ -562,10 +565,11 @@ void Sensor_Process(sensor_name_t sensor) {
         case STATE_INIT:
             result = Sensor_Init(sensor);
 
-            sensor6_ready = false;
+            /* Pre-clear the sensor ready flag */
+            *p_ready_flag = false;
 
             /* Proceed to triggering */
-            *p_state = STATE_TRIGGER_DIFFERENTIAL;
+            *p_state = STATE_TRIGGER_CAP;
             break;
 
         /* */
@@ -577,13 +581,41 @@ void Sensor_Process(sensor_name_t sensor) {
             break;
 
         /* Start a new capacitance conversion */
-        case STATE_TRIGGER_DIFFERENTIAL:
+        case STATE_TRIGGER_CAP:
 
             /* Clear the ready flag for the next read */
-            sensor6_ready = false;
+            *p_ready_flag = false;
 
-            /* Set the mode to differential capture */
-            *p_mode = MODE_C_DIFFERENTIAL;
+            /* If single ended captures are enabled, then cycle through the three cap types
+             * (differential, then c1, then c2) for two full cycles before advancing to do
+             * a chip temperature read */
+            if (enable_c1_c2) {
+
+                /* Set the next mode based on the last */
+                switch (last_sensor_mode) {
+                    case MODE_C_DIFFERENTIAL:
+                    default:
+                        next_sensor_mode = MODE_C_CAP1;
+                        break;
+
+                    case MODE_C_CAP1:
+                        next_sensor_mode = MODE_C_CAP2;
+                        break;
+
+                    case MODE_C_CAP2:
+                        next_sensor_mode = MODE_C_DIFFERENTIAL;
+                        break;
+                }
+
+                /* Do the assignment now */
+                *p_mode = next_sensor_mode;
+                last_sensor_mode = next_sensor_mode;
+
+            } else {
+
+                /* Single ended disabled, so always set the mode to differential capture */
+                *p_mode = MODE_C_DIFFERENTIAL;
+            }
 
             /* Tell the device to start conversion */
             Sensor_Trigger(sensor, *p_mode);
@@ -606,13 +638,13 @@ void Sensor_Process(sensor_name_t sensor) {
             }
 
             /* Did the conversion complete since last invocation of the state machine? */
-            if (sensor6_ready) {
+            if (*p_ready_flag) {
                 Sensor_Read(sensor, *p_mode);
 
                 /* Count how many differential conversions */
                 *p_conversions += 1;
                 if (*p_conversions < AD7746_TEMP_TRIGGER_RATE) {
-                    *p_state = STATE_TRIGGER_DIFFERENTIAL;
+                    *p_state = STATE_TRIGGER_CAP;
                 } else {
                     *p_state = STATE_TRIGGER_TEMPERATURE;
                 }
@@ -623,7 +655,7 @@ void Sensor_Process(sensor_name_t sensor) {
         case STATE_TRIGGER_TEMPERATURE:
 
             /* Clear the ready flag for the next read */
-            sensor6_ready = false;
+            *p_ready_flag = false;
 
             /* Reset the conversions count */
             *p_conversions = 0;
@@ -652,11 +684,11 @@ void Sensor_Process(sensor_name_t sensor) {
             }
 
             /* Did the conversion complete since last invocation of the state machine? */
-            if (sensor6_ready) {
+            if (*p_ready_flag) {
                 Sensor_Read(sensor, *p_mode);
 
                 /* Return to converting capacitances */
-                *p_state = STATE_TRIGGER_DIFFERENTIAL;
+                *p_state = STATE_TRIGGER_CAP;
             }
             break;
 
@@ -749,6 +781,7 @@ uint32_t Sensor_Task_Init(void) {
         sensor_control[sensor].relay_position  = SWITCH_LBL;
         sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].conversion_time = CONVERT_TIME_109MS;
+        sensor_control[sensor].enable_c1_c2    = false;
 
         /* Initialize the I2C bus for the sensor */
         I2CInit(sensor);
