@@ -20,17 +20,8 @@
   #define EXTERN
 #endif
 
-#ifdef DEBUG_INTERRUPT
-#define MAX_SENSOR_TIMEOUT_MS     5000
-#define MAX_FAILED_INIT_WAIT_MS   5000
-#else
-// Run the sensor timeouts faster when debugging
-#define MAX_SENSOR_TIMEOUT_MS     1000
-#define MAX_FAILED_INIT_WAIT_MS   1000
-#endif
-
-#define MIN_TASK_SLEEP_MS         1
-#define MIN_TEMP_READ_PERIOD_MS   1000
+/* Attempt to re-initialize the sensor once a second */
+#define SENSOR_REINIT_TIMEOUT_MS  1000
 
 // -----------------------------------------------------------------------------
 // HDC1080 - Temperature and humidity sensor
@@ -157,13 +148,12 @@
 typedef enum {
     STATE_POR                   = 0,
     STATE_INIT                  = 1,
-    STATE_INIT_FAILED           = 2,
-    STATE_INIT_FAILED_WAIT      = 3,
-    STATE_TRIGGER_CAP           = 4,
-    STATE_TRIGGER_CAP_WAIT      = 5,
-    STATE_TRIGGER_TEMPERATURE   = 6,
-    STATE_TRIGGER_TEMP_WAIT     = 7,
-    STATE_FAULTED               = 8,
+    STATE_INIT_WAIT             = 2,
+    STATE_TRIGGER_CAP           = 3,
+    STATE_TRIGGER_CAP_WAIT      = 4,
+    STATE_TRIGGER_TEMPERATURE   = 5,
+    STATE_TRIGGER_TEMP_WAIT     = 6,
+    STATE_FAULTED               = 7,
     STATE_MAX
 } sensor_state_t;
 
@@ -229,8 +219,11 @@ typedef struct {
     /* State machine */
     sensor_state_t            state;
 
+    /* Connection status */
+    bool                      connected;
+
     /* Timer value for initialization delay (after a failed init) */
-    uint32_t                  init_wait;
+    int32_t                   init_wait_timer;
 
     /* Sensor switching */
     sensor_relay_position_t   relay_position;

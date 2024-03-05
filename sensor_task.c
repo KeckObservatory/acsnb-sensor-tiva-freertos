@@ -539,15 +539,13 @@ void Sensor_Process(sensor_name_t sensor) {
     sensor_mode_t *p_mode = &(sensor_control[sensor].mode);
     uint8_t *p_conversions = &(sensor_control[sensor].conversions);
     bool enable_c1_c2 = sensor_control[sensor].enable_c1_c2;
+    bool *p_connected = &(sensor_control[sensor].connected);
+    int32_t *p_init_wait_timer = &(sensor_control[sensor].init_wait_timer);
 
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
     bool *p_ready_flag = sensor_io[sensor].isr_flag;
 
-
-    //uint32_t init_wait = sensor_control[sensor].init_wait;
     //sensor_relay_position_t relay_position = sensor_control[sensor].relay_position;
-    //sensor_cap_mode_t cap_mode = sensor_control[sensor].cap_mode;
-    //sensor_conversion_time_t conversion_time = sensor_control[sensor].conversion_time;
 
 
     /* Get the current time for calculating timeouts */
@@ -555,14 +553,33 @@ void Sensor_Process(sensor_name_t sensor) {
 
     switch (*p_state) {
 
-        /* Power-on-reset state; init the devices */
+        /* Power-on-reset state; init the device */
         case STATE_POR:
+        default:
+
+            /* Re-drive the I2C initialization of the bus */
+            I2CInit(sensor);
+
+            /* Send the 0xBF reset value to the sensor to see if it's there */
             result = Sensor_Reset(sensor);
-            *p_state = STATE_INIT;
+
+            /* Is the sensor responding? */
+            if (result) {
+                *p_state = STATE_INIT;
+                *p_connected = true;
+
+            /* If the sensor is unplugged the reset will fail */
+            } else {
+
+                /* Fault the sensor, which will start waiting for it to be connected */
+                *p_state = STATE_FAULTED;
+            }
+
             break;
 
-        /* */
+        /* Initialize the sensor */
         case STATE_INIT:
+            /* Reset completed, try to init the sensor */
             result = Sensor_Init(sensor);
 
             /* Pre-clear the sensor ready flag */
@@ -570,14 +587,23 @@ void Sensor_Process(sensor_name_t sensor) {
 
             /* Proceed to triggering */
             *p_state = STATE_TRIGGER_CAP;
+
             break;
 
-        /* */
-        case STATE_INIT_FAILED:
-            break;
+        /* Wait for a specified amount of time before attempting to reset the sensor
+         * and try again */
+        case STATE_INIT_WAIT:
+            /* How long have we been waiting? */
+            elapsed = now - state_start_tick;
 
-        /* */
-        case STATE_INIT_FAILED_WAIT:
+            /* Deduct that from the re-loaded timer */
+            *p_init_wait_timer -= elapsed;
+
+            /* When timer goes below 0, try to init the sensor again */
+            if (*p_init_wait_timer < 0) {
+                *p_state = STATE_POR;
+            }
+
             break;
 
         /* Start a new capacitance conversion */
@@ -625,6 +651,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
             /* Start timing the wait state */
             state_start_tick = xTaskGetTickCount();
+
             break;
 
         /* Await the ready flag */
@@ -649,6 +676,7 @@ void Sensor_Process(sensor_name_t sensor) {
                     *p_state = STATE_TRIGGER_TEMPERATURE;
                 }
             }
+
             break;
 
         /* Start a new temperature conversion */
@@ -671,6 +699,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
             /* Start timing the wait state */
             state_start_tick = xTaskGetTickCount();
+
             break;
 
         /* Await the ready flag */
@@ -690,15 +719,25 @@ void Sensor_Process(sensor_name_t sensor) {
                 /* Return to converting capacitances */
                 *p_state = STATE_TRIGGER_CAP;
             }
+
             break;
 
-
-
-        /* Device has faulted, restart the init process */
+        /* Device has faulted, restart the POR init process */
         case STATE_FAULTED:
 
-            break;
+            /* Mark the sensor as disconnected */
+            *p_connected = false;
 
+            /* Start a timer to reconnect in 1 second */
+            *p_init_wait_timer = SENSOR_REINIT_TIMEOUT_MS;
+
+            /* Start timing the wait state */
+            state_start_tick = xTaskGetTickCount();
+
+            /* Enter the wait state */
+            *p_state = STATE_INIT_WAIT;
+
+            break;
     }
 
 }
@@ -731,12 +770,16 @@ static void Sensor_Task(void *pvParameters) {
     // Loop forever.
     while (1) {
 
-        /* Run the state machine once for each sensor */
-        /*
-        for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
-            Sensor_Process(sensor);
-        }*/
+        /* Run the state machine once for each sensor, should take about 1ms each */
+        //for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
+        //    Sensor_Process(sensor);
+        //}
 
+        Sensor_Process(SENSOR1);
+        Sensor_Process(SENSOR2);
+        Sensor_Process(SENSOR3);
+        //Sensor_Process(SENSOR4);
+        //Sensor_Process(SENSOR5);
         Sensor_Process(SENSOR6);
 
 #ifdef zero
@@ -777,7 +820,7 @@ uint32_t Sensor_Task_Init(void) {
 
         /* Initialize the fields to sane defaults */
         sensor_control[sensor].state           = STATE_POR;
-        sensor_control[sensor].init_wait       = 0;
+        sensor_control[sensor].init_wait_timer = 0;
         sensor_control[sensor].relay_position  = SWITCH_LBL;
         sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].conversion_time = CONVERT_TIME_109MS;
