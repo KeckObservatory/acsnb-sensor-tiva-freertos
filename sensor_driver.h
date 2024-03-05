@@ -71,7 +71,8 @@ typedef struct {
     uint32_t sda;          /* I2C data pin alias */
     uint32_t sda_pin;      /* I2C data pin alias */
     uint32_t rdy_port;     /* The GPIO port for the ready signal pin */
-    uint32_t rdy_pin;      /* Ready signal pin alias */
+    uint32_t rdy_pin;      /* Ready signal pin alias, bit packed */
+    uint32_t rdy_pin_num;  /* Ready signal pin number 0-7 */
     isrFunc isr;           /* Ready signal interrupt service routine */
     bool *isr_flag;        /* The flag to set when the ready signal is asserted */
 } sensor_io_t;
@@ -94,6 +95,7 @@ sensor_io_t sensor_io[MAX_SENSORS] = {
         [SENSOR1].sda_pin     = GPIO_PIN_3,
         [SENSOR1].rdy_port    = GPIO_PORTA_BASE,
         [SENSOR1].rdy_pin     = GPIO_PIN_7,
+        [SENSOR1].rdy_pin_num = 7,
         [SENSOR1].isr         = Sensor1Ready,
         [SENSOR1].isr_flag    = &sensor1_ready,
 
@@ -106,6 +108,7 @@ sensor_io_t sensor_io[MAX_SENSORS] = {
         [SENSOR2].sda_pin     = GPIO_PIN_5,
         [SENSOR2].rdy_port    = GPIO_PORTB_BASE,
         [SENSOR2].rdy_pin     = GPIO_PIN_5,
+        [SENSOR2].rdy_pin_num = 5,
         [SENSOR2].isr         = Sensor2Ready,
         [SENSOR2].isr_flag    = &sensor2_ready,
 
@@ -118,6 +121,7 @@ sensor_io_t sensor_io[MAX_SENSORS] = {
         [SENSOR3].sda_pin     = GPIO_PIN_5,
         [SENSOR3].rdy_port    = GPIO_PORTC_BASE,
         [SENSOR3].rdy_pin     = GPIO_PIN_4,
+        [SENSOR3].rdy_pin_num = 4,
         [SENSOR3].isr         = Sensor3Ready,
         [SENSOR3].isr_flag    = &sensor3_ready,
 
@@ -130,6 +134,7 @@ sensor_io_t sensor_io[MAX_SENSORS] = {
         [SENSOR4].sda_pin     = GPIO_PIN_1,
         [SENSOR4].rdy_port    = GPIO_PORTD_BASE,
         [SENSOR4].rdy_pin     = GPIO_PIN_7,
+        [SENSOR4].rdy_pin_num = 7,
         [SENSOR4].isr         = Sensor4Ready,
         [SENSOR4].isr_flag    = &sensor4_ready,
 
@@ -142,6 +147,7 @@ sensor_io_t sensor_io[MAX_SENSORS] = {
         [SENSOR5].sda_pin     = GPIO_PIN_3,
         [SENSOR5].rdy_port    = GPIO_PORTE_BASE,
         [SENSOR5].rdy_pin     = GPIO_PIN_0,
+        [SENSOR5].rdy_pin_num = 0,
         [SENSOR5].isr         = Sensor5Ready,
         [SENSOR5].isr_flag    = &sensor5_ready,
 
@@ -154,6 +160,7 @@ sensor_io_t sensor_io[MAX_SENSORS] = {
         [SENSOR6].sda_pin     = GPIO_PIN_7,
         [SENSOR6].rdy_port    = GPIO_PORTF_BASE,
         [SENSOR6].rdy_pin     = GPIO_PIN_4,
+        [SENSOR6].rdy_pin_num = 4,
         [SENSOR6].isr         = Sensor6Ready,
         [SENSOR6].isr_flag    = &sensor6_ready,
 };

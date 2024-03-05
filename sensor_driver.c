@@ -134,28 +134,30 @@ void SensorReadySet(sensor_name_t sensor, bool enable) {
 
     uint32_t rdy_port = sensor_io[sensor].rdy_port;
     uint32_t rdy_pin = sensor_io[sensor].rdy_pin;
+    uint8_t rdy_pin_num = sensor_io[sensor].rdy_pin_num;
     isrFunc isr = sensor_io[sensor].isr;
     bool *isr_flag = sensor_io[sensor].isr_flag;
 
     /* Connect an interrupt handler to the ready select pin. */
     GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
     GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
-    GPIOIntRegister(rdy_port, isr);
-    GPIOIntClear(rdy_port, rdy_pin);
 
     /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
      * conversion on enabled channel(s) has been finished and the new data is available.
      */
-    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_RISING_EDGE); // Per node box schematic, signal is inverted so use the rising edge
+    //GPIOIntRegister(rdy_port, isr);
+    GPIOIntRegisterPin(rdy_port, rdy_pin_num, isr);
+    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_RISING_EDGE); /* Per node box schematic, signal is inverted so use the rising edge */
+    GPIOIntClear(rdy_port, rdy_pin);
+
+    /* Clear the ready flag for the device */
+    *isr_flag = false;
 
     if (enable) {
         GPIOIntEnable(rdy_port, rdy_pin);
     } else {
         GPIOIntDisable(rdy_port, rdy_pin);
     }
-
-    /* Clear the ready flag for the device */
-    *isr_flag = false;
 }
 
 
@@ -387,4 +389,5 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
     }
 
     return 0;
+
 }

@@ -360,6 +360,10 @@ bool Sensor_Init(sensor_name_t sensor) {
     result = I2CSend(base, AD7746_ADDR, buf, 2);
     if (result < 0) return false;
 
+    /* Enable the conversion ready interrupt */
+    SensorReadySet(sensor, true);
+
+#ifdef do_not_need_this_is_same_as_a_trigger
     /* Configure conversion time */
     buf[0] = AD7746_CFG_REG;
     switch (sensor_control[sensor].conversion_time) {
@@ -379,9 +383,7 @@ bool Sensor_Init(sensor_name_t sensor) {
     }
     result = I2CSend(base, AD7746_ADDR, buf, 2);
     if (result < 0) return false;
-
-    /* Enable the conversion ready interrupt */
-    SensorReadySet(sensor, true);
+#endif
 
     /* If we got this far, init was successful */
     return true;
@@ -788,13 +790,11 @@ static void Sensor_Task(void *pvParameters) {
         //    Sensor_Process(sensor);
         //}
 
-#ifdef testing
-        Sensor_Process(SENSOR1);
-        Sensor_Process(SENSOR2);
-        Sensor_Process(SENSOR3);
-#endif
-        //Sensor_Process(SENSOR4);
-        //Sensor_Process(SENSOR5);
+        //Sensor_Process(SENSOR1);
+        //Sensor_Process(SENSOR2);
+        //Sensor_Process(SENSOR3);
+        //Sensor_Process(SENSOR4);  // busted?
+        //Sensor_Process(SENSOR5);  // busted?
         Sensor_Process(SENSOR6);
 
 #ifdef zero
