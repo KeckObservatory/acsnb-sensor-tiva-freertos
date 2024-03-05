@@ -338,11 +338,15 @@ bool Sensor_Init(sensor_name_t sensor) {
     uint8_t buf[2];
     uint32_t base = sensor_io[sensor].periph_base;
 
+    /* Read the status register to verify the device is there */
+    //result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 1);
+    //if (result < 0) return false;
+
     /* Configure capacitance measurement to default (differential) */
     buf[0] = AD7746_CAP_SETUP_REG;
     buf[1] = AD7746_CAP_DIFFERENTIAL;
     result = I2CSend(base, AD7746_ADDR, buf, 2);
-    if (result < 0) return false;
+
 
     /* Configure voltage/temperature (enable internal temperature sensor) */
     buf[0] = AD7746_VT_SETUP_REG;
@@ -376,10 +380,12 @@ bool Sensor_Init(sensor_name_t sensor) {
     result = I2CSend(base, AD7746_ADDR, buf, 2);
     if (result < 0) return false;
 
+    /* Enable the conversion ready interrupt */
+    SensorReadySet(sensor, true);
+
     /* If we got this far, init was successful */
     return true;
 }
-
 
 
 /* -----------------------------------------------------------------------------
@@ -453,7 +459,6 @@ bool Sensor_Trigger(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
     return true;
 }
-
 
 
 /* -----------------------------------------------------------------------------
@@ -579,14 +584,19 @@ void Sensor_Process(sensor_name_t sensor) {
 
         /* Initialize the sensor */
         case STATE_INIT:
-            /* Reset completed, try to init the sensor */
-            result = Sensor_Init(sensor);
-
             /* Pre-clear the sensor ready flag */
             *p_ready_flag = false;
 
-            /* Proceed to triggering */
-            *p_state = STATE_TRIGGER_CAP;
+            /* Reset completed, try to init the sensor */
+            result = Sensor_Init(sensor);
+
+            if (result) {
+                /* Proceed to triggering */
+                *p_state = STATE_TRIGGER_CAP;
+            } else {
+                /* Fault the sensor, which will start waiting for it to be connected */
+                *p_state = STATE_FAULTED;
+            }
 
             break;
 
@@ -728,6 +738,9 @@ void Sensor_Process(sensor_name_t sensor) {
             /* Mark the sensor as disconnected */
             *p_connected = false;
 
+            /* Disconnect the ready interrupt */
+            SensorReadySet(sensor, false);
+
             /* Start a timer to reconnect in 1 second */
             *p_init_wait_timer = SENSOR_REINIT_TIMEOUT_MS;
 
@@ -775,9 +788,11 @@ static void Sensor_Task(void *pvParameters) {
         //    Sensor_Process(sensor);
         //}
 
+#ifdef testing
         Sensor_Process(SENSOR1);
         Sensor_Process(SENSOR2);
         Sensor_Process(SENSOR3);
+#endif
         //Sensor_Process(SENSOR4);
         //Sensor_Process(SENSOR5);
         Sensor_Process(SENSOR6);
@@ -804,7 +819,8 @@ static void Sensor_Task(void *pvParameters) {
 #endif
 
         // Wait for the required amount of time.
-        vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
+        //vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
+        vTaskDelay(task_delay / portTICK_RATE_MS);
     }
 }
 
