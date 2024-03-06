@@ -347,7 +347,6 @@ bool Sensor_Init(sensor_name_t sensor) {
     buf[1] = AD7746_CAP_DIFFERENTIAL;
     result = I2CSend(base, AD7746_ADDR, buf, 2);
 
-
     /* Configure voltage/temperature (enable internal temperature sensor) */
     buf[0] = AD7746_VT_SETUP_REG;
     buf[1] = AD7746_VT_SETUP_INT_TEMP;
@@ -359,9 +358,6 @@ bool Sensor_Init(sensor_name_t sensor) {
     buf[1] = AD7746_EXC_SET_A;
     result = I2CSend(base, AD7746_ADDR, buf, 2);
     if (result < 0) return false;
-
-    /* Enable the conversion ready interrupt */
-    SensorReadySet(sensor, true);
 
 #ifdef do_not_need_this_is_same_as_a_trigger
     /* Configure conversion time */
@@ -740,9 +736,6 @@ void Sensor_Process(sensor_name_t sensor) {
             /* Mark the sensor as disconnected */
             *p_connected = false;
 
-            /* Disconnect the ready interrupt */
-            SensorReadySet(sensor, false);
-
             /* Start a timer to reconnect in 1 second */
             *p_init_wait_timer = SENSOR_REINIT_TIMEOUT_MS;
 
@@ -790,7 +783,7 @@ static void Sensor_Task(void *pvParameters) {
         //    Sensor_Process(sensor);
         //}
 
-        //Sensor_Process(SENSOR1);
+        Sensor_Process(SENSOR1);
         //Sensor_Process(SENSOR2);
         //Sensor_Process(SENSOR3);
         //Sensor_Process(SENSOR4);  // busted?

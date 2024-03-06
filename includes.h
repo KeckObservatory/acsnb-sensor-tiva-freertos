@@ -51,6 +51,7 @@
 #include "semphr.h"
 
 // Drivers
+#include <gpio_isr.h>
 #include "ssi_driver.h"
 #include "sensor_driver.h"
 

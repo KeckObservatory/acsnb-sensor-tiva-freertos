@@ -11,14 +11,6 @@
 #define SSI_DRIVER_C_
 #include "includes.h"
 
-/* Variables and pointers used */
-static uint8_t *SSI0_RxPointer;
-static uint8_t *SSI0_TxPointer;
-static uint8_t *SSI0_TXDMAPointer;
-static bool *SSI0_msg_ready;
-
-static uint16_t dataLength;
-
 /* -----------------------------------------------------------------------------
  * Initialize the SSI0 device.
  */
@@ -27,12 +19,12 @@ void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint8_t tx_dma_buffer[],
     uint32_t trashBin[1] = {0};
 
     /* Initialize flags for receiving message */
-    SSI0_RxPointer = &rx_buffer[0];
-    SSI0_TxPointer = &tx_buffer[0];
-    SSI0_TXDMAPointer = &tx_dma_buffer[0];
+    SSI0_rx_pointer = &rx_buffer[0];
+    SSI0_tx_pointer = &tx_buffer[0];
+    SSI0_tx_dma_pointer = &tx_dma_buffer[0];
     SSI0_msg_ready = msg_ready;
 
-    dataLength = length;
+    SSI0_data_length = length;
 
     /* Enable the uDMA and SSI0 peripherals */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
@@ -53,55 +45,15 @@ void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint8_t tx_dma_buffer[],
 
     /* Connect an interrupt handler to the chip select pin.  This will be used to drive
      * the next transaction. */
-    GPIOIntRegister(GPIO_PORTA_BASE, SSI0SlaveSelectIntHandler);
-    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_RISING_EDGE);
-    GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_3);
+    //GPIOIntRegister(GPIO_PORTA_BASE, SSI0SlaveSelectIntHandler);
+    //GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_RISING_EDGE);
+    //GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_3);
 
     /* Turn on the SSI0 */
     SSIEnable(SSI0_BASE);
 
     /* Clear SSI0 RX Buffer */
     while (SSIDataGetNonBlocking(SSI0_BASE, &trashBin[0])) {}
-}
-
-/* -----------------------------------------------------------------------------
- * Interrupt handler for the SSI0 chip select rising edge (when it's de-asserted)
- */
-void SSI0SlaveSelectIntHandler(void) {
-
-    /* Clear the interrupt that signaled the end of chip select to this device */
-    GPIOIntClear(GPIO_PORTA_BASE, GPIO_PIN_3);
-
-    /* There might be bytes left over in the transmit FIFO, we cannot let them be sent!
-     * Therefore we must reset the SSI0 device */
-    SSIDisable(SSI0_BASE);
-    SysCtlPeripheralReset(SYSCTL_PERIPH_SSI0);
-    SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
-    SSIEnable(SSI0_BASE);
-
-    /* Copy the outbound message to the buffer the DMA will read from */
-    memcpy(SSI0_TXDMAPointer, SSI0_TxPointer, SSI_MESSAGE_LENGTH);
-
-    /* SSI0 is fully reset.  Drive a new DMA transfer of the buffer */
-    uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
-                               UDMA_MODE_BASIC,
-                               (void *)(SSI0_BASE + SSI_O_DR),
-                               SSI0_RxPointer,
-                               dataLength);
-    uDMAChannelEnable(UDMA_CHANNEL_SSI0RX);
-
-    uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
-                               UDMA_MODE_BASIC,
-                               SSI0_TXDMAPointer,
-                               (void *)(SSI0_BASE + SSI_O_DR),
-                               dataLength);
-    uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
-
-    /* Enable the DMA transfer */
-    SSIDMAEnable(SSI0_BASE, SSI_DMA_RX | SSI_DMA_TX);
-
-    /* Set the flag that the message has been received */
-    *SSI0_msg_ready = true;
 }
 
 
@@ -178,8 +130,8 @@ void SSI0InitTransfer(void) {
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
                            UDMA_MODE_BASIC,
                            (void *)(SSI0_BASE + SSI_O_DR),
-                           SSI0_RxPointer,
-                           dataLength);
+                           SSI0_rx_pointer,
+                           SSI0_data_length);
 
     //****************************************************************************
     // uDMA SSI0 TX
@@ -208,9 +160,9 @@ void SSI0InitTransfer(void) {
        data register. */
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
                            UDMA_MODE_BASIC,
-                           SSI0_TXDMAPointer,
+                           SSI0_tx_dma_pointer,
                            (void *)(SSI0_BASE + SSI_O_DR),
-                           dataLength);
+                           SSI0_data_length);
 
     /* Now both the uDMA SSI0 TX and RX channels are primed to start a
        transfer.  As soon as the channels are enabled, the peripheral will

@@ -20,6 +20,14 @@
 
 #include "includes.h"
 
+/* Variables and pointers used */
+EXTERN uint8_t *SSI0_rx_pointer;
+EXTERN uint8_t *SSI0_tx_pointer;
+EXTERN uint8_t *SSI0_tx_dma_pointer;
+EXTERN bool *SSI0_msg_ready;
+EXTERN uint16_t SSI0_data_length;
+
+
 /* -----------------------------------------------------------------------------
  * Function prototypes
  */

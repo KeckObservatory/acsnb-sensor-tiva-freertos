@@ -47,10 +47,7 @@ void I2CInit(sensor_name_t sensor) {
     uint32_t scl_pin = sensor_io[sensor].scl_pin;
     uint32_t sda = sensor_io[sensor].sda;
     uint32_t sda_pin = sensor_io[sensor].sda_pin;
-    uint32_t rdy_port = sensor_io[sensor].rdy_port;
-    uint32_t rdy_pin = sensor_io[sensor].rdy_pin;
-    isrFunc isr = sensor_io[sensor].isr;
-    bool *isr_flag = sensor_io[sensor].isr_flag;
+    //bool *isr_flag = sensor_io[sensor].isr_flag;
 
     /* Dear reader, there is a crazy hack here.
      *
@@ -76,7 +73,7 @@ void I2CInit(sensor_name_t sensor) {
      */
 
     /* Disable a ready interrupt if we had one active */
-    GPIOIntDisable(rdy_port, rdy_pin);
+    //TODO: do we need this?    GPIOIntDisable(rdy_port, rdy_pin);
 
     /* Disable the I2C bus, we're about to rip its I/O lines away */
     SysCtlPeripheralDisable(peripheral);
@@ -87,10 +84,10 @@ void I2CInit(sensor_name_t sensor) {
     /* Strobe 10 clock cycles out to it */
     for (i = 0; i < 10; i++) {
         GPIOPinWrite(port_base, scl_pin, 0);
-        for (loop = 0; loop < 100000; loop++) {}
-
+        //for (loop = 0; loop < 100000; loop++) {} // 20ms
+        for (loop = 0; loop < 5000; loop++) {} // 1ms
         GPIOPinWrite(port_base, scl_pin, scl_pin);
-        for (loop = 0; loop < 100000; loop++) {}
+        for (loop = 0; loop < 5000; loop++) {} // 750us
     }
 
     /* Enable the I2C peripheral */
@@ -127,78 +124,10 @@ void I2CInit(sensor_name_t sensor) {
     HWREG(periph_base + I2C_O_FIFOCTL) = 80008000;
 }
 
-/* -----------------------------------------------------------------------------
- * Enable the Ready interrupt for a given sensor.
- */
-void SensorReadySet(sensor_name_t sensor, bool enable) {
-
-    uint32_t rdy_port = sensor_io[sensor].rdy_port;
-    uint32_t rdy_pin = sensor_io[sensor].rdy_pin;
-    uint8_t rdy_pin_num = sensor_io[sensor].rdy_pin_num;
-    isrFunc isr = sensor_io[sensor].isr;
-    bool *isr_flag = sensor_io[sensor].isr_flag;
-
-    /* Connect an interrupt handler to the ready select pin. */
-    GPIOPinTypeGPIOInput(rdy_port, rdy_pin);
-    GPIOPadConfigSet(rdy_port, rdy_pin, GPIO_STRENGTH_2MA, GPIO_PIN_TYPE_STD);
-
-    /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
-     * conversion on enabled channel(s) has been finished and the new data is available.
-     */
-    //GPIOIntRegister(rdy_port, isr);
-    GPIOIntRegisterPin(rdy_port, rdy_pin_num, isr);
-    GPIOIntTypeSet(rdy_port, rdy_pin, GPIO_RISING_EDGE); /* Per node box schematic, signal is inverted so use the rising edge */
-    GPIOIntClear(rdy_port, rdy_pin);
-
-    /* Clear the ready flag for the device */
-    *isr_flag = false;
-
-    if (enable) {
-        GPIOIntEnable(rdy_port, rdy_pin);
-    } else {
-        GPIOIntDisable(rdy_port, rdy_pin);
-    }
-}
-
 
 /* -----------------------------------------------------------------------------
- * Interrupt handler for sensor 1 conversion ready signal.
+ * Send a buffer via I2C to a sensor.
  */
-void Sensor1Ready(void) {
-
-    /* Clear the interrupt */
-    GPIOIntClear(sensor_io[SENSOR1].rdy_port, sensor_io[SENSOR1].rdy_pin);
-
-    /* Set the flag that the conversion is complete */
-    *sensor_io[SENSOR1].isr_flag = true;
-}
-
-/* -----------------------------------------------------------------------------
- * Interrupt handlers for sensors 2-6 conversion ready signal.  Same code as
- * above but comments are removed for compactness.
- */
-void Sensor2Ready(void) {
-    GPIOIntClear(sensor_io[SENSOR2].rdy_port, sensor_io[SENSOR2].rdy_pin);
-    *sensor_io[SENSOR2].isr_flag = true;
-}
-void Sensor3Ready(void) {
-    GPIOIntClear(sensor_io[SENSOR3].rdy_port, sensor_io[SENSOR3].rdy_pin);
-    *sensor_io[SENSOR3].isr_flag = true;
-}
-void Sensor4Ready(void) {
-    GPIOIntClear(sensor_io[SENSOR4].rdy_port, sensor_io[SENSOR4].rdy_pin);
-    *sensor_io[SENSOR4].isr_flag = true;
-}
-void Sensor5Ready(void) {
-    GPIOIntClear(sensor_io[SENSOR5].rdy_port, sensor_io[SENSOR5].rdy_pin);
-    *sensor_io[SENSOR5].isr_flag = true;
-}
-void Sensor6Ready(void) {
-    GPIOIntClear(sensor_io[SENSOR6].rdy_port, sensor_io[SENSOR6].rdy_pin);
-    *sensor_io[SENSOR6].isr_flag = true;
-}
-
-
 int8_t I2CSend(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
 
     uint8_t i;
@@ -286,7 +215,9 @@ int8_t I2CSend(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
     return 0;
 }
 
-
+/* -----------------------------------------------------------------------------
+ * Receive a buffer via I2C from a sensor.
+ */
 int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
 
     uint8_t i;
