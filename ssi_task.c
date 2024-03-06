@@ -163,9 +163,9 @@ uint32_t SSI_Task_Init(void) {
     /* Create the RTOS task */
     if (xTaskCreate(SSI_Task, (const portCHAR *)"SSI", SSI_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SSI_TASK, NULL) != pdTRUE) {
-        return(1);
+        return (1);
     }
 
     /* Success */
-    return(0);
+    return (0);
 }

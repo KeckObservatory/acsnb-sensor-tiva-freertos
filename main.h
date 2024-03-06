@@ -20,20 +20,14 @@
   #define EXTERN
 #endif
 
-
-//*****************************************************************************
-// The mutex that protects concurrent access of UART from multiple tasks.
-//*****************************************************************************
+/* The mutex that protects concurrent access of UART from multiple tasks */
 EXTERN xSemaphoreHandle g_pUARTSemaphore;
 
-//*****************************************************************************
-// The mutex that protects concurrent access of SPI messaging buffers.
-//*****************************************************************************
+/* The mutex that protects concurrent access of SPI messaging buffers */
 EXTERN xSemaphoreHandle g_txMessageSemaphore;
 
 /* -----------------------------------------------------------------------------
  * Function prototypes
- * -----------------------------------------------------------------------------
  */
 EXTERN void v_printf(const char *pcString, ...);
 

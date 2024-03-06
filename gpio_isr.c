@@ -25,7 +25,23 @@
 /* -----------------------------------------------------------------------------
  * Connect the individual GPIO lines to their ISRs.
  */
-void GPIOSetupISR(void) {
+void GPIO_Setup_ISR(void) {
+
+    /* Init all the GPIO peripherals */
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOA)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOC);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOC)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOD);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOD)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOE);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOE)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOF);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOF)) {}
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG)) {}
 
     /* Clear the ready flags */
     sensor1_ready = false;
@@ -44,12 +60,12 @@ void GPIOSetupISR(void) {
     GPIOPinTypeGPIOInput(GPIO_PORTF_BASE, GPIO_INT_PIN_4);
 
     /* Tie the interrupt handlers */
-    GPIOIntRegister(GPIO_PORTA_BASE, GPIOPortAIntHandler);
-    GPIOIntRegister(GPIO_PORTB_BASE, GPIOPortBIntHandler);
-    GPIOIntRegister(GPIO_PORTC_BASE, GPIOPortCIntHandler);
-    GPIOIntRegister(GPIO_PORTD_BASE, GPIOPortDIntHandler);
-    GPIOIntRegister(GPIO_PORTE_BASE, GPIOPortEIntHandler);
-    GPIOIntRegister(GPIO_PORTF_BASE, GPIOPortFIntHandler);
+    GPIOIntRegister(GPIO_PORTA_BASE, GPIO_PortA_Int_Handler);
+    GPIOIntRegister(GPIO_PORTB_BASE, GPIO_PortB_Int_Handler);
+    GPIOIntRegister(GPIO_PORTC_BASE, GPIO_PortC_Int_Handler);
+    GPIOIntRegister(GPIO_PORTD_BASE, GPIO_PortD_Int_Handler);
+    GPIOIntRegister(GPIO_PORTE_BASE, GPIO_PortE_Int_Handler);
+    GPIOIntRegister(GPIO_PORTF_BASE, GPIO_PortF_Int_Handler);
 
     /* From the AD7745 spec pg 7: A falling edge on this output indicates that a
      * conversion on enabled channel(s) has been finished and the new data is available.
@@ -89,7 +105,7 @@ void GPIOSetupISR(void) {
  * Sensor 1 ready on PORTA pin 7
  * SSI0 chip select on PORTA pin 3
  */
-void GPIOPortAIntHandler(void) {
+void GPIO_PortA_Int_Handler(void) {
 
     uint32_t int_status = GPIOIntStatus(GPIO_PORTA_BASE, true);
 
@@ -144,7 +160,7 @@ void GPIOPortAIntHandler(void) {
  * Interrupt handler for PORTA GPIO lines.
  * Sensor 2 ready on PORTB pin 5
  */
-void GPIOPortBIntHandler(void) {
+void GPIO_PortB_Int_Handler(void) {
 
     uint32_t int_status = GPIOIntStatus(GPIO_PORTB_BASE, true);
 
@@ -160,7 +176,7 @@ void GPIOPortBIntHandler(void) {
  * Interrupt handler for PORTA GPIO lines.
  * Sensor 3 ready on PORTC pin 4
  */
-void GPIOPortCIntHandler(void) {
+void GPIO_PortC_Int_Handler(void) {
 
     uint32_t int_status = GPIOIntStatus(GPIO_PORTC_BASE, true);
 
@@ -176,7 +192,7 @@ void GPIOPortCIntHandler(void) {
  * Interrupt handler for PORTA GPIO lines.
  * Sensor 4 ready on PORTD pin 7
  */
-void GPIOPortDIntHandler(void) {
+void GPIO_PortD_Int_Handler(void) {
 
     uint32_t int_status = GPIOIntStatus(GPIO_PORTD_BASE, true);
 
@@ -192,7 +208,7 @@ void GPIOPortDIntHandler(void) {
  * Interrupt handler for PORTA GPIO lines.
  * Sensor 5 ready on PORTE pin 0
  */
-void GPIOPortEIntHandler(void) {
+void GPIO_PortE_Int_Handler(void) {
 
     uint32_t int_status = GPIOIntStatus(GPIO_PORTE_BASE, true);
 
@@ -208,7 +224,7 @@ void GPIOPortEIntHandler(void) {
  * Interrupt handler for PORTA GPIO lines.
  * Sensor 6 ready on PORTF pin 4
  */
-void GPIOPortFIntHandler(void) {
+void GPIO_PortF_Int_Handler(void) {
 
     uint32_t int_status = GPIOIntStatus(GPIO_PORTF_BASE, true);
 
@@ -218,7 +234,4 @@ void GPIOPortFIntHandler(void) {
 
     GPIOIntClear(GPIO_PORTF_BASE, int_status);
 }
-
-
-
 

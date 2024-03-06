@@ -127,10 +127,8 @@ EXTERN union {
 EXTERN bool rxtx_message_ready;
 
 
-
 /* -----------------------------------------------------------------------------
  * Function prototypes
- * -----------------------------------------------------------------------------
  */
 EXTERN void SSI_ISR(void);
 EXTERN uint32_t SSI_Task_Init(void);

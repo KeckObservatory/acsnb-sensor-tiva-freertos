@@ -23,13 +23,13 @@
 /* -----------------------------------------------------------------------------
  * Function prototypes
  */
-EXTERN void GPIOSetupISR(void);
-EXTERN void GPIOPortAIntHandler(void);
-EXTERN void GPIOPortBIntHandler(void);
-EXTERN void GPIOPortCIntHandler(void);
-EXTERN void GPIOPortDIntHandler(void);
-EXTERN void GPIOPortEIntHandler(void);
-EXTERN void GPIOPortFIntHandler(void);
+EXTERN void GPIO_Setup_ISR(void);
+EXTERN void GPIO_PortA_Int_Handler(void);
+EXTERN void GPIO_PortB_Int_Handler(void);
+EXTERN void GPIO_PortC_Int_Handler(void);
+EXTERN void GPIO_PortD_Int_Handler(void);
+EXTERN void GPIO_PortE_Int_Handler(void);
+EXTERN void GPIO_PortF_Int_Handler(void);
 
 #undef EXTERN
 

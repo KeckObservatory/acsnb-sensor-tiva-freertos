@@ -24,7 +24,7 @@
  * Note that sensors are named 1 to 6 and are indexed from 0.
  */
 typedef enum {
-    SENSOR1                   = 0,
+    SENSOR1 = 0,
     SENSOR2,
     SENSOR3,
     SENSOR4,
@@ -44,7 +44,6 @@ EXTERN bool sensor6_ready;
 
 /* -----------------------------------------------------------------------------
  * Sensor I2C bus control
- * -----------------------------------------------------------------------------
  */
 
 /* Define the ISR function call to make a function pointer out of it */
