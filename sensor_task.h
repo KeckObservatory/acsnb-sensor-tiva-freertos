@@ -219,6 +219,13 @@ typedef struct {
     /* State machine */
     sensor_state_t            state;
 
+    /* Disabled for use flag. Not all sensors need to be connected, some
+     * mirror segments have fewer than 6 sensors on them.  Note that this
+     * is called "disabled" instead of "enabled" so that the default value
+     * will be to enable all the sensors, and the node box software can
+     * selectively disable sensors as needed. */
+    bool                      disabled;
+
     /* Connection status */
     bool                      connected;
 

@@ -43,12 +43,6 @@ void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint8_t tx_dma_buffer[],
     /* Configure SSI clock to run at 5MHz */
     SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
 
-    /* Connect an interrupt handler to the chip select pin.  This will be used to drive
-     * the next transaction. */
-    //GPIOIntRegister(GPIO_PORTA_BASE, SSI0SlaveSelectIntHandler);
-    //GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_PIN_3, GPIO_RISING_EDGE);
-    //GPIOIntEnable(GPIO_PORTA_BASE, GPIO_PIN_3);
-
     /* Turn on the SSI0 */
     SSIEnable(SSI0_BASE);
 

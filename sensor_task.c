@@ -339,8 +339,8 @@ bool Sensor_Init(sensor_name_t sensor) {
     uint32_t base = sensor_io[sensor].periph_base;
 
     /* Read the status register to verify the device is there */
-    //result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 1);
-    //if (result < 0) return false;
+    result = I2CReceive(base, AD7746_ADDR, AD7746_READ, buf, 1);
+    if (result < 0) return false;
 
     /* Configure capacitance measurement to default (differential) */
     buf[0] = AD7746_CAP_SETUP_REG;
@@ -539,6 +539,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
     /* Get the values used to drive the state machine from the control structure */
     sensor_state_t *p_state = &(sensor_control[sensor].state);
+    bool disabled = sensor_control[sensor].disabled;
     sensor_mode_t *p_mode = &(sensor_control[sensor].mode);
     uint8_t *p_conversions = &(sensor_control[sensor].conversions);
     bool enable_c1_c2 = sensor_control[sensor].enable_c1_c2;
@@ -550,6 +551,8 @@ void Sensor_Process(sensor_name_t sensor) {
 
     //sensor_relay_position_t relay_position = sensor_control[sensor].relay_position;
 
+    /* Don't process disabled sensors */
+    if (disabled) return true;
 
     /* Get the current time for calculating timeouts */
     now = xTaskGetTickCount();
@@ -652,10 +655,15 @@ void Sensor_Process(sensor_name_t sensor) {
             }
 
             /* Tell the device to start conversion */
-            Sensor_Trigger(sensor, *p_mode);
+            result = Sensor_Trigger(sensor, *p_mode);
 
-            /* Advance to the next state to await the conversion result, or time out */
-            *p_state = STATE_TRIGGER_CAP_WAIT;
+            if (result) {
+                /* Advance to the next state to await the conversion result, or time out */
+                *p_state = STATE_TRIGGER_CAP_WAIT;
+            } else {
+                /* Fault the sensor, which will start waiting for it to be connected */
+                *p_state = STATE_FAULTED;
+            }
 
             /* Start timing the wait state */
             state_start_tick = xTaskGetTickCount();
@@ -700,10 +708,15 @@ void Sensor_Process(sensor_name_t sensor) {
             *p_mode = MODE_TEMPERATURE;
 
             /* Tell the device to start conversion */
-            Sensor_Trigger(sensor, *p_mode);
+            result = Sensor_Trigger(sensor, *p_mode);
 
-            /* Advance to the next state to await the conversion result, or time out */
-            *p_state = STATE_TRIGGER_TEMP_WAIT;
+            if (result) {
+                /* Advance to the next state to await the conversion result, or time out */
+                *p_state = STATE_TRIGGER_TEMP_WAIT;
+            } else {
+                /* Fault the sensor, which will start waiting for it to be connected */
+                *p_state = STATE_FAULTED;
+            }
 
             /* Start timing the wait state */
             state_start_tick = xTaskGetTickCount();
@@ -779,16 +792,9 @@ static void Sensor_Task(void *pvParameters) {
     while (1) {
 
         /* Run the state machine once for each sensor, should take about 1ms each */
-        //for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
-        //    Sensor_Process(sensor);
-        //}
-
-        Sensor_Process(SENSOR1);
-        //Sensor_Process(SENSOR2);
-        //Sensor_Process(SENSOR3);
-        //Sensor_Process(SENSOR4);  // busted?
-        //Sensor_Process(SENSOR5);  // busted?
-        Sensor_Process(SENSOR6);
+        for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
+            Sensor_Process(sensor);
+        }
 
 #ifdef zero
 
@@ -829,6 +835,7 @@ uint32_t Sensor_Task_Init(void) {
 
         /* Initialize the fields to sane defaults */
         sensor_control[sensor].state           = STATE_POR;
+        sensor_control[sensor].disabled        = false;
         sensor_control[sensor].init_wait_timer = 0;
         sensor_control[sensor].relay_position  = SWITCH_LBL;
         sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
@@ -839,16 +846,12 @@ uint32_t Sensor_Task_Init(void) {
         I2CInit(sensor);
     }
 
-
-    /* Initialize the I2C bus for each sensor */
-    /*
-    I2CInit(SENSOR1);
-    I2CInit(SENSOR2);
-    I2CInit(SENSOR3);
-    I2CInit(SENSOR4);
-    I2CInit(SENSOR5);
-    I2CInit(SENSOR6);
-    */
+    /* Testing: disable some sensors */
+    sensor_control[SENSOR2].disabled = true;
+    sensor_control[SENSOR3].disabled = true;
+    sensor_control[SENSOR4].disabled = true;
+    sensor_control[SENSOR5].disabled = true;
+    //sensor_control[SENSOR6].disabled = true;
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {

@@ -47,7 +47,6 @@ void I2CInit(sensor_name_t sensor) {
     uint32_t scl_pin = sensor_io[sensor].scl_pin;
     uint32_t sda = sensor_io[sensor].sda;
     uint32_t sda_pin = sensor_io[sensor].sda_pin;
-    //bool *isr_flag = sensor_io[sensor].isr_flag;
 
     /* Dear reader, there is a crazy hack here.
      *
@@ -71,9 +70,6 @@ void I2CInit(sensor_name_t sensor) {
      *
      * This can and will eventually occur when a sensor is hot plugged!
      */
-
-    /* Disable a ready interrupt if we had one active */
-    //TODO: do we need this?    GPIOIntDisable(rdy_port, rdy_pin);
 
     /* Disable the I2C bus, we're about to rip its I/O lines away */
     SysCtlPeripheralDisable(peripheral);
@@ -105,8 +101,7 @@ void I2CInit(sensor_name_t sensor) {
     GPIOPinTypeI2CSCL(port_base, scl_pin);
     GPIOPinTypeI2C(port_base, sda_pin);
 
-    /*
-     * Enable and initialize the I2C0 master module.  Use the system clock for
+    /* Enable and initialize the I2C0 master module.  Use the system clock for
      * the I2C0 module.  The last parameter sets the I2C data transfer rate.
      * If false the data rate is set to 100kbps and if true the data rate will
      * be set to 400kbps.
