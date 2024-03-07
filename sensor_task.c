@@ -16,6 +16,173 @@
 #define SENSOR_QUEUE_SIZE          5
 
 
+#ifdef zero
+
+/* -----------------------------------------------------------------------------
+ * Read the SI7020 temperature/humidity sensor.
+ */
+bool TH_Sensor_Read(sensor_name_t sensor) {
+    uint8_t         txBuffer[1];
+    uint8_t         rxBuffer[2];
+    float t, h;
+
+    /* Read Si7020 Si7020Temp */
+    txBuffer[0]                 = Si7020_TMP_HOLD;
+    i2cTransaction.slaveAddress = Si7020_ADDR;
+    i2cTransaction.writeBuf     = txBuffer;
+    i2cTransaction.writeCount   = 1;
+    i2cTransaction.readBuf      = rxBuffer;
+    i2cTransaction.readCount    = 2;
+    if (!I2C_transfer(i2c, &i2cTransaction))
+    {
+    System_printf("readSi7020: Error 1\n");
+    System_flush();
+    return -1;
+    }
+    //Si7020Temp = (float)((rxBuffer[0] << 8) + (rxBuffer[1]))*175.2/65536-46.85;
+    t = (float)((rxBuffer[0] << 8) + (rxBuffer[1]))*175.72/65536-46.85;
+
+    spiMessageOut.msg.sensor[device].tempHigh     = rxBuffer[0];
+    spiMessageOut.msg.sensor[device].tempLow      = rxBuffer[1];
+
+    /* Read Si7020 Si7020Hum */
+    txBuffer[0]                 = Si7020_HUM_HOLD;
+    i2cTransaction.slaveAddress = Si7020_ADDR;
+    i2cTransaction.writeBuf     = txBuffer;
+    i2cTransaction.writeCount   = 1;
+    i2cTransaction.readBuf      = rxBuffer;
+    i2cTransaction.readCount    = 2;
+    if (!I2C_transfer(i2c, &i2cTransaction))
+    {
+    System_printf("readSi7020: Error 2\n");
+    System_flush();
+    return -1;
+    }
+
+    //h = (float)((rxBuffer[0] << 8) + (rxBuffer[1]))*125/65536-6;
+
+    /* Lock the structure with the message, by taking the semaphore */
+    if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
+
+        tx_message.msg.sensor[sensor].diff_cap_high = buf[1];
+        tx_message.msg.sensor[sensor].diff_cap_mid  = buf[2];
+        tx_message.msg.sensor[sensor].diff_cap_low  = buf[3];
+
+        /* Release the semaphore */
+        xSemaphoreGive(g_txMessageSemaphore);
+    }
+
+    /* If we got this far, read was successful */
+    return true;
+}
+#endif
+
+
+
+/* -----------------------------------------------------------------------------
+ * Initialize the Si7020 temperature/humidity sensor.
+ */
+bool TH_Sensor_Init(sensor_name_t sensor) {
+
+    int8_t result;
+    uint8_t buf1[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+    uint8_t buf2[6] = {0, 0, 0, 0, 0, 0};
+    uint32_t base = sensor_io[sensor].periph_base;
+
+    /* Determine if a Si7020 device is present.  It may not be connected.  Not
+     * all segments will have temperature+humidity sensing.  Thus, try to
+     * read the electronic serial number (ESN) from it.  This occurs in two
+     * reads.  The first is 8 bytes, the second is 6, at differing addresses. */
+
+    /* First part of ESN at 0xFA0F */
+    buf1[0] = SI7020_READ_ESN1_1;
+    buf1[1] = SI7020_READ_ESN1_2;
+    result = I2CSend(base, SI7020_ADDR, buf1, 2);
+
+    /* Read 8 bytes */
+    result = I2CReceiveNoreg(base, SI7020_ADDR, buf1, 8);
+    if (result < 0) return false;
+
+    /* Second part of ESN at 0xFCC9 */
+    buf2[0] = SI7020_READ_ESN2_1;
+    buf2[1] = SI7020_READ_ESN2_2;
+    result = I2CSend(base, SI7020_ADDR, buf2, 2);
+
+    /* Read 6 bytes */
+    result = I2CReceiveNoreg(base, SI7020_ADDR, buf2, 6);
+    if (result < 0) return false;
+
+    /* Assemble the ESN from the piece parts in the buffers */
+    sensor_control[sensor].si7020_esn[0] = buf1[SI7020_SNA_0];
+    sensor_control[sensor].si7020_esn[1] = buf1[SI7020_SNA_1];
+    sensor_control[sensor].si7020_esn[2] = buf1[SI7020_SNA_2];
+    sensor_control[sensor].si7020_esn[3] = buf1[SI7020_SNA_3];
+    sensor_control[sensor].si7020_esn[4] = buf2[SI7020_SNB_0];
+    sensor_control[sensor].si7020_esn[5] = buf2[SI7020_SNB_1];
+    sensor_control[sensor].si7020_esn[6] = buf2[SI7020_SNB_2];
+    sensor_control[sensor].si7020_esn[7] = buf2[SI7020_SNB_3];
+
+    /* Detect if it's an Si2070 */
+    if (buf2[SI7020_SNB_3] == SI7020_ID) {
+        sensor_control[sensor].si7020_connected = true;
+    }
+
+    /* If we got this far, init was successful */
+    return true;
+}
+
+/* -----------------------------------------------------------------------------
+ * Initialize the HDC1080 temperature/humidity sensor.
+ */
+bool TH_Sensor_Trigger(sensor_name_t sensor) {
+
+    int8_t result;
+    uint8_t buf[2];
+    uint32_t base = sensor_io[sensor].periph_base;
+
+#ifdef zero
+    /* Attempt to configure the HDC1080 device.  Note, it may not be present
+     * on this sensor! */
+    buf[0] = HDC1080_TRIGGER_BOTH;
+    result = I2CSend(base, HDC1080_ADDR, HDC1080_CFG_REG, buf, 1);
+    if (result < 0) return false;
+#endif
+
+    /* If we got this far, init was successful */
+    return true;
+}
+
+#ifdef zero
+
+    txBuffer[0]                 = HDC1080_TRIGGER_BOTH;
+    i2cTransaction.slaveAddress = HDC1080_ADDR;
+    i2cTransaction.writeBuf     = txBuffer;
+    i2cTransaction.writeCount   = 1;
+    i2cTransaction.readBuf      = rxBuffer;
+    i2cTransaction.readCount    = 0;
+
+    if (!I2C_transfer(i2c, &i2cTransaction)) {
+      System_printf("(%d) Error in setup HDC1080, trigger failure.\n", device);
+      System_flush();
+      return -1;
+    }
+
+    return 0;
+
+
+
+
+
+
+
+    /* If we got this far, init was successful */
+    return true;
+}
+#endif
+
+
+
+
 /* -----------------------------------------------------------------------------
  * Reset a capacitance sensor.
  */
@@ -248,7 +415,12 @@ void Sensor_Process(sensor_name_t sensor) {
         default:
 
             /* Re-drive the I2C initialization of the bus */
+#ifdef temp
             I2CInit(sensor);
+#endif
+
+            TH_Sensor_Init(sensor);
+            return;
 
             /* Send the 0xBF reset value to the sensor to see if it's there */
             result = Sensor_Reset(sensor);
@@ -474,10 +646,15 @@ static void Sensor_Task(void *pvParameters) {
     // Loop forever.
     while (1) {
 
+#ifdef hold
         /* Run the state machine once for each sensor, should take about 1ms each */
         for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
             Sensor_Process(sensor);
         }
+#endif
+
+        Sensor_Process(SENSOR6);
+
 
 #ifdef zero
 

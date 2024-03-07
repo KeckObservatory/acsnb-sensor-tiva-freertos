@@ -139,6 +139,7 @@ EXTERN bool I2CMasterTimeout(uint32_t ui32Base);
 EXTERN void I2CInit(sensor_name_t sensor);
 EXTERN int8_t I2CSend(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len);
 EXTERN int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len);
+EXTERN int8_t I2CReceiveNoreg(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len);
 
 #undef EXTERN
 

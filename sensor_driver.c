@@ -317,3 +317,105 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
     return 0;
 
 }
+
+
+
+
+
+
+
+/* -----------------------------------------------------------------------------
+ * Receive a buffer via I2C from a sensor.
+ */
+int8_t I2CReceiveNoreg(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
+
+    uint8_t i;
+    uint32_t err;
+    bool timeout;
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err & I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err & I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err & I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err & I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
+
+    /* Specify that we are going to read from slave device */
+    I2CMasterSlaveAddrSet(base, slave_addr, true);
+
+    /* Single byte reads are special */
+    if (len == 1) {
+
+        /* Receive just one byte */
+        I2CMasterControl(base, I2C_MASTER_CMD_SINGLE_RECEIVE);
+
+        /* Wait for MCU to finish transaction */
+        while (I2CMasterBusy(base));
+
+        /* Capture one byte */
+        buf[0] = I2CMasterDataGet(base);
+
+    } else {
+        /* Any length more than 1 is a burst read */
+
+        /* Send control byte and read from the register we specified */
+        I2CMasterBurstLengthSet(base, len);
+
+        for (i = 0; i < len; i++) {
+
+            if (i == 0) {
+                /* First byte starts the transaction */
+                I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_START);
+            } else if (i == (len-1)) {
+                /* Last byte finishes the transaction */
+                I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_FINISH);
+            } else {
+                I2CMasterControl(base, I2C_MASTER_CMD_BURST_RECEIVE_CONT);
+            }
+
+            /* Wait for MCU to finish transaction */
+            while (I2CMasterBusy(base));
+
+            /* Capture one byte */
+            buf[i] = I2CMasterDataGet(base);
+        }
+    }
+
+    /* Check the I2C bus for errors */
+    err = I2CMasterErr(base);
+
+    if (err != I2C_MASTER_ERR_NONE) {
+
+        /* Wait for MCU to time out */
+        //while(I2CMasterBusy(base) && !I2CMasterTimeout(base));
+
+        if (err & I2C_MASTER_ERR_ADDR_ACK)
+            return -1;
+        if (err & I2C_MASTER_ERR_DATA_ACK)
+            return -2;
+        if (err & I2C_MASTER_ERR_ARB_LOST)
+            return -3;
+        if (err & I2C_MASTER_ERR_CLK_TOUT)
+            return -4;
+    }
+
+    /* Check for timeout */
+    timeout = I2CMasterTimeout(base);
+    if (timeout) {
+//        return -5;
+    }
+
+    return 0;
+
+}

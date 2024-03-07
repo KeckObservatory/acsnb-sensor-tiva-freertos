@@ -23,31 +23,43 @@
 /* Attempt to re-initialize the sensor once a second */
 #define SENSOR_REINIT_TIMEOUT_MS  1000
 
-// -----------------------------------------------------------------------------
-// HDC1080 - Temperature and humidity sensor
-#define HDC1080_ADDR              0x40
-#define HDC1080_TMP_REG           0x00
-#define HDC1080_HUM_REG           0x01
 
-// HDC1080 configuration register definitions
-// Bit 15: RST (1 = software reset)
-// Bit 13: HEAT (0 = heater disabled)
-// Bit 12: MODE (0 = temp OR humidity, 1 = temp AND humidity in sequence)
-// Bit 11: BTST (0 = battery voltage > 2.8V)
-// Bit 10: TRES (0 = 14 bit temperature measurement resolution)
-// Bit 9+8: HRES (00 = 14 bit humidity  measurement resolution)
-// All other bits reserved and must be 0
-#define HDC1080_CFG_REG           0x02
-#define HDC1080_CFG_MODE_T_OR_H   0b0000000000000000
-#define HDC1080_CFG_MODE_T_AND_H  0b0001000000000000
-#define HDC1080_TRIGGER_BOTH      0x00
-#define HDC1080_TRIGGER_ONE       0x01
-#define HDC1080_SB1               0xFB
-#define HDC1080_SB2               0xFC
-#define HDC1080_SB3               0xFD
-#define HDC1080_MANUFID           0xFE
-#define HDC1080_DEVICEID          0xFF
+/* -----------------------------------------------------------------------------
+ * SI7020 Temperature / Humidity sensor
+ */
+#define SI7020_ADDR          0x40
+#define SI7020_HUM_HOLD      0xE5
+#define SI7020_HUM_NO_HOLD   0xF5
+#define SI7020_TMP_HOLD      0xE3
+#define SI7020_TMP_NO_HOLD   0xF3
+#define SI7020_TMP_PREVIOUS  0xF0
+#define SI7020_RESET         0xFE
+#define SI7020_WRITE_USER_1  0xE6
+#define SI7020_WRITE_USER_2  0x51
+#define SI7020_READ_HEATER   0x11
 
+/* 2 byte register addresses to read the ESN */
+#define SI7020_READ_ESN1_1   0xFA
+#define SI7020_READ_ESN1_2   0x0F
+#define SI7020_READ_ESN2_1   0xFC
+#define SI7020_READ_ESN2_2   0xC9
+
+/* Offsets into the buffers from the ESN reads to get the individual
+ * bytes of the ESN.  They do not arrive sequentially.  See Si7020
+ * spec, page 24. */
+#define SI7020_SNA_0         6
+#define SI7020_SNA_1         4
+#define SI7020_SNA_2         2
+#define SI7020_SNA_3         0
+
+#define SI7020_SNB_0         4
+#define SI7020_SNB_1         3
+#define SI7020_SNB_2         1
+#define SI7020_SNB_3         0
+
+#define SI7013_ID            0x0D
+#define SI7020_ID            0x14
+#define SI7021_ID            0x15
 
 
 /* -----------------------------------------------------------------------------
@@ -246,6 +258,10 @@ typedef struct {
 
     /* Capacitor conversion cycles, used to interleave temperature measurements */
     uint8_t                   conversions;
+
+    /* Si7020 temperature+humidity sensing serial number */
+    bool                      si7020_connected;
+    uint8_t                   si7020_esn[8];
 
 } sensor_control_t;
 
