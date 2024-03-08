@@ -22,7 +22,7 @@
 //! \return Returns \b true if the I2C bus has timed out; otherwise, returns
 //! \b false.
 //*****************************************************************************
-bool I2CMasterTimeout(uint32_t ui32Base) {
+bool I2C_Master_Timeout(uint32_t ui32Base) {
 
     // Return the bus timeout status
     if (HWREG(ui32Base + I2C_O_MCS) & I2C_MCS_CLKTO) {
@@ -35,7 +35,7 @@ bool I2CMasterTimeout(uint32_t ui32Base) {
 /* -----------------------------------------------------------------------------
  * Initialize sensor port 1: I2C module 0 (SDA0, SCL0) and RDY_1_OUT on PA7
  */
-void I2CInit(sensor_name_t sensor) {
+void I2C_Init(sensor_name_t sensor) {
 
     uint8_t i;
     volatile uint32_t loop;
@@ -123,7 +123,7 @@ void I2CInit(sensor_name_t sensor) {
 /* -----------------------------------------------------------------------------
  * Send a buffer via I2C to a sensor.
  */
-int8_t I2CSend(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
+int8_t I2C_Send(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
 
     uint8_t i;
     uint32_t err;
@@ -213,7 +213,7 @@ int8_t I2CSend(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
 /* -----------------------------------------------------------------------------
  * Receive a buffer via I2C from a sensor.
  */
-int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
+int8_t I2C_Receive_Register(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf, uint8_t len) {
 
     uint8_t i;
     uint32_t err;
@@ -309,7 +309,7 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
     }
 
     /* Check for timeout */
-    timeout = I2CMasterTimeout(base);
+    timeout = I2C_Master_Timeout(base);
     if (timeout) {
 //        return -5;
     }
@@ -319,15 +319,10 @@ int8_t I2CReceive(uint32_t base, uint32_t slave_addr, uint8_t reg, uint8_t *buf,
 }
 
 
-
-
-
-
-
 /* -----------------------------------------------------------------------------
  * Receive a buffer via I2C from a sensor.
  */
-int8_t I2CReceiveNoreg(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
+int8_t I2C_Receive(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t len) {
 
     uint8_t i;
     uint32_t err;
@@ -411,7 +406,7 @@ int8_t I2CReceiveNoreg(uint32_t base, uint32_t slave_addr, uint8_t *buf, uint8_t
     }
 
     /* Check for timeout */
-    timeout = I2CMasterTimeout(base);
+    timeout = I2C_Master_Timeout(base);
     if (timeout) {
 //        return -5;
     }

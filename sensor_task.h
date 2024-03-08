@@ -20,9 +20,15 @@
   #define EXTERN
 #endif
 
+/* -----------------------------------------------------------------------------
+ * Timer values.
+ */
+
 /* Attempt to re-initialize the sensor once a second */
 #define SENSOR_REINIT_TIMEOUT_MS  1000
 
+/* Attempt to init the temp+humidity sensor every 10 seconds */
+#define TH_REINIT_TIMEOUT_MS      1000 //10000
 
 /* -----------------------------------------------------------------------------
  * SI7020 Temperature / Humidity sensor
@@ -61,6 +67,26 @@
 #define SI7020_ID            0x14
 #define SI7021_ID            0x15
 
+/*
+ * Si7020 temperature is calculated from two bytes, t0 and t1.
+ * T = (T0 << 8 + T1) * 175.72 / 65536-46.85
+ *
+ * Humidity is expressed as:
+ * H = (H0 << 8 + H1) * 125 / 65536 - 6
+ *
+ * When the sensor is disconnected, we want to read back invalid values, such as a
+ * temperatures of 999C and humidity of 0%.  Back calculate the values to return
+ * when this is the case.
+ *
+ */
+
+/* 99C is equal to 54396 (decimal) */
+#define SI7020_INVALID_TH    0xD4
+#define SI7020_INVALID_TL    0x7C
+
+/* 0% RH is equal to 3146 (decimal) */
+#define SI7020_INVALID_HH    0x0C
+#define SI7020_INVALID_HL    0x4A
 
 /* -----------------------------------------------------------------------------
  * AD7746 - Capacitance sensor
@@ -163,7 +189,8 @@ typedef enum {
     STATE_TRIGGER_CAP_WAIT      = 4,
     STATE_TRIGGER_TEMPERATURE   = 5,
     STATE_TRIGGER_TEMP_WAIT     = 6,
-    STATE_FAULTED               = 7,
+    STATE_READ_TH               = 7,
+    STATE_FAULTED               = 8,
     STATE_MAX
 } sensor_state_t;
 
@@ -259,9 +286,10 @@ typedef struct {
     /* Capacitor conversion cycles, used to interleave temperature measurements */
     uint8_t                   conversions;
 
-    /* Si7020 temperature+humidity sensing serial number */
+    /* Si7020 temperature+humidity sensing control */
     bool                      si7020_connected;
     uint8_t                   si7020_esn[8];
+    int32_t                   si7020_timer;
 
 } sensor_control_t;
 
