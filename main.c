@@ -87,6 +87,114 @@ void v_printf(const char *pcString, ...) {
 
 
 /* -----------------------------------------------------------------------------
+ * API for timers.
+ */
+
+/* Initialize a timer, and start it */
+void timer_set(timer_t* timer, uint32_t interval) {
+    timer->interval = interval;
+    timer_start(timer);
+}
+
+/* Start a timer */
+void timer_start(timer_t* timer) {
+    timer->start_time = xTaskGetTickCount();
+}
+
+/*  Returns true if the timer has expired */
+bool timer_expired(timer_t* timer) {
+    return (xTaskGetTickCount() >= (timer->start_time + timer->interval));
+}
+
+/* Continue a timer, retaining the base time */
+void timer_continue(timer_t* timer) {
+    timer->start_time += timer->interval;
+}
+
+/* Expire a timer */
+void timer_expire(timer_t* timer) {
+    timer->start_time = 0;
+}
+
+/* Reports back the amount of time remaining before the timer is considered
+ * Done, in milliseconds */
+uint32_t timer_time_remaining(timer_t* timer) {
+
+  uint32_t clock = xTaskGetTickCount();
+
+  if (clock >= (timer->start_time + timer->interval))
+    return 0;
+  else
+    return (timer->start_time + timer->interval) - clock;
+}
+
+/* Reports back the amount of time elapsed on the timer, in milliseconds */
+uint32_t timer_elapsed_time(timer_t* timer) {
+  return (xTaskGetTickCount() - timer->start_time);
+}
+
+/* Returns true if this timer has been set at least once, ready to time */
+bool timer_was_initialized(timer_t* timer) {
+  return (timer->interval != 0);
+}
+
+/* -----------------------------------------------------------------------------
+ * API for stop watches.
+ */
+
+/* Clear a stop watch, making it ready to use */
+void stopwatch_clear(stopwatch_t* stopwatch) {
+    stopwatch->running       = false;
+    stopwatch->residual_time = 0;
+}
+
+/* Start new timing using a stop watch. Accumulated time is cleared */
+void stopwatch_start(stopwatch_t* stopwatch) {
+    stopwatch->start_time    = xTaskGetTickCount();
+    stopwatch->residual_time = 0;
+    stopwatch->running       = true;
+}
+
+/* Continue a current timing using a stop watch. Accumulated time is not cleared */
+void stopwatch_continue(stopwatch_t* stopwatch) {
+
+  /* If we are already running, this is nothing to do. */
+  if (stopwatch->running) {
+    return;
+  }
+
+  stopwatch->start_time = xTaskGetTickCount();
+  stopwatch->running    = true;
+}
+
+/* Stop a running stop watch */
+void stopwatch_stop(stopwatch_t* stopwatch) {
+
+    /* If we are running, get the elapsed time currently on the watch and add it
+     to the residual time to keep it accumulated properly. */
+    if (stopwatch->running) {
+        stopwatch->residual_time += (xTaskGetTickCount() - stopwatch->start_time);
+    }
+
+    stopwatch->running = false;
+}
+
+/* Returns the total elapsed time on a stop watch, in milliseconds */
+uint32_t stopwatch_elapsed_ms(stopwatch_t* stopwatch) {
+
+  uint32_t elapsed;
+
+    if (stopwatch->running) {
+        elapsed = stopwatch->residual_time + (xTaskGetTickCount() - stopwatch->start_time);
+    } else {
+        elapsed = stopwatch->residual_time;
+    }
+
+  return elapsed;
+}
+
+
+/* -----------------------------------------------------------------------------
  * Initialize FreeRTOS and start the initial set of tasks.
  */
 int main(void) {

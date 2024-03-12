@@ -402,107 +402,126 @@ bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
 
 /* -----------------------------------------------------------------------------
- * Sensor state machine processing function.
+ * Sensor state machine processing function.  This runs every 10ms.
  */
 void Sensor_Process(sensor_name_t sensor) {
 
+#define TO_STATE(s) (*p_state = s)
+
     bool result = false;
-    static uint32_t wait_state_start_tick = 0;
-    static uint32_t th_state_start_tick = 0;
-    uint32_t now = 0;
-    uint32_t elapsed = 0;
+
+    static timer_t timer_init;
+    static timer_t timer_ready_timeout;
+
     static sensor_mode_t next_sensor_mode, last_sensor_mode = MODE_C_DIFFERENTIAL;
 
     /* Get the values used to drive the state machine from the control structure */
-    sensor_state_t *p_state = &(sensor_control[sensor].state);
-    bool disabled = sensor_control[sensor].disabled;
-    sensor_mode_t *p_mode = &(sensor_control[sensor].mode);
-    uint8_t *p_conversions = &(sensor_control[sensor].conversions);
-    bool enable_c1_c2 = sensor_control[sensor].enable_c1_c2;
-    bool *p_connected = &(sensor_control[sensor].connected);
+    sensor_state_t *p_state    = &(sensor_control[sensor].state);
+    bool disabled              =   sensor_control[sensor].disabled;
+    sensor_mode_t *p_mode      = &(sensor_control[sensor].mode);
+    uint8_t *p_conversions     = &(sensor_control[sensor].conversions);
+    bool enable_c1_c2          =   sensor_control[sensor].enable_c1_c2;
+    bool *p_cap_connected      = &(sensor_control[sensor].ad7746_connected);
     int32_t *p_init_wait_timer = &(sensor_control[sensor].init_wait_timer);
-    bool *p_th_connected = &(sensor_control[sensor].si7020_connected);
-    int32_t *p_th_timer = &(sensor_control[sensor].si7020_timer);
+    bool *p_th_connected       = &(sensor_control[sensor].si7020_connected);
+    int32_t *p_th_timer        = &(sensor_control[sensor].si7020_timer);
 
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
-    bool *p_ready_flag = sensor_io[sensor].isr_flag;
+    bool *p_ready_flag         = sensor_io[sensor].isr_flag;
 
     //sensor_relay_position_t relay_position = sensor_control[sensor].relay_position;
 
     /* Don't process disabled sensors */
     if (disabled) return;
 
-    /* Get the current time for calculating timeouts */
-    now = xTaskGetTickCount();
-
     switch (*p_state) {
 
-        /* Power-on-reset state; init the device */
+        /* Power-on-reset state */
         case STATE_POR:
         default:
 
+            /* Start off disconnected */
+            *p_cap_connected = false;
+            *p_th_connected = false;
 
-#ifdef temp
-            /* Re-drive the I2C initialization of the bus */
+            /* Setup the initialization timer */
+            timer_set(&timer_init, SENSOR_INIT_TIMEOUT_MS);
+
+            /* Expire the init timer so it happens immediately */
+            timer_expire(&timer_init);
+
+            /* Setup the ready signal timer */
+            timer_set(&timer_ready_timeout, SENSOR_READY_TIMEOUT_MS);
+
+            TO_STATE(STATE_IDLE);
+            break;
+
+        /* Check timers and run subsystems */
+        case STATE_IDLE:
+
+            /* Periodically try to get the temperature and humidity */
+
+
+            /* If the sensor is connected, get the capacitance */
+            if (*p_cap_connected) {
+
+                /* Interleave cap conversions with on-chip temperature converts */
+                if (*p_conversions < AD7746_TEMP_TRIGGER_RATE) {
+                    TO_STATE(STATE_TRIGGER_CAP);
+                } else {
+                    TO_STATE(STATE_TRIGGER_TEMPERATURE);
+                }
+
+            /* Else, try to reset+init the sensor periodically */
+            } else if (timer_expired(&timer_init)) {
+                TO_STATE(STATE_RESET);
+            }
+
+            break;
+
+        /* Reset the AD7746 device.  Note: this must occur in its own state, in order to give
+         * the device a bit of time before triggering the first conversion. */
+        case STATE_RESET:
+            /* Pre-clear the sensor ready flag */
+            *p_ready_flag = false;
+
+            /* Init the I2C bus, this will clear a hung I2C bus from an incomplete transaction */
             I2C_Init(sensor);
 
-            /* Send the 0xBF reset value to the sensor to see if it's there */
+            /* Init the AD7746 capacitance sensor: send a 0xBF reset value to the sensor
+             * to see if it's there */
             result = Sensor_Reset(sensor);
 
             /* Is the sensor responding? */
             if (result) {
-                *p_state = STATE_INIT;
-                *p_connected = true;
+                /* Mark the sensor as connected */
+                *p_cap_connected = true;
+                TO_STATE(STATE_INIT);
 
-            /* If the sensor is unplugged the reset will fail */
+            /* If the sensor is unplugged the reset will have failed */
             } else {
-
-                /* Fault the sensor, which will start waiting for it to be connected */
-                *p_state = STATE_FAULTED;
+                /* Mark the sensor as disconnected and return to idle */
+                *p_cap_connected = false;
+                TO_STATE(STATE_IDLE);
             }
-#endif
-
-            /* Start timing the temp+hum sensor interval */
-            th_state_start_tick = xTaskGetTickCount();
-            *p_th_timer = TH_REINIT_TIMEOUT_MS;
-
-            *p_state = STATE_READ_TH;
 
             break;
 
-        /* Initialize the sensor */
+        /* Initialize the I2C devices (cap sensor, t+h sensor) */
         case STATE_INIT:
-            /* Pre-clear the sensor ready flag */
-            *p_ready_flag = false;
 
-            /* Reset completed, try to init the sensor */
+            /* Try to init the sensor */
             result = Sensor_Init(sensor);
 
-            if (result) {
-                /* Proceed to triggering */
-                *p_state = STATE_TRIGGER_CAP;
-            } else {
-                /* Fault the sensor, which will start waiting for it to be connected */
-                *p_state = STATE_FAULTED;
+            if (!result) {
+                /* Mark the sensor as disconnected before returning to idle */
+                *p_cap_connected = false;
             }
 
+            /* Always go back to idle so the timers can run */
+            TO_STATE(STATE_IDLE);
             break;
 
-        /* Wait for a specified amount of time before attempting to reset the sensor
-         * and try again */
-        case STATE_INIT_WAIT:
-            /* How long have we been waiting? */
-            elapsed = now - wait_state_start_tick;
-
-            /* Deduct that from the re-loaded timer */
-            *p_init_wait_timer -= elapsed;
-
-            /* When timer goes below 0, try to init the sensor again */
-            if (*p_init_wait_timer < 0) {
-                *p_state = STATE_POR;
-            }
-
-            break;
 
         /* Start a new capacitance conversion */
         case STATE_TRIGGER_CAP:
@@ -546,38 +565,38 @@ void Sensor_Process(sensor_name_t sensor) {
 
             if (result) {
                 /* Advance to the next state to await the conversion result, or time out */
-                *p_state = STATE_TRIGGER_CAP_WAIT;
+                TO_STATE(STATE_TRIGGER_CAP_WAIT);
             } else {
-                /* Fault the sensor, which will start waiting for it to be connected */
-                *p_state = STATE_FAULTED;
+                /* Mark the sensor as disconnected and return to idle */
+                *p_cap_connected = false;
+                TO_STATE(STATE_IDLE);
             }
 
-            /* Start timing the wait state */
-            wait_state_start_tick = xTaskGetTickCount();
+            /* Start timing the ready signal */
+            timer_start(&timer_ready_timeout);
 
             break;
 
         /* Await the ready flag */
         case STATE_TRIGGER_CAP_WAIT:
 
-            /* Check for timeout after 1 second */
-            elapsed = now - wait_state_start_tick;
-            if (elapsed > 1000) {
-                *p_state = STATE_POR;
+            /* Check for ready signal timeout */
+            if (timer_expired(&timer_ready_timeout)) {
+                //TODO: count the number of timeouts?
+                TO_STATE(STATE_POR);
                 return;
             }
 
-            /* Did the conversion complete since last invocation of the state machine? */
+            /* Did the conversion complete yet? */
             if (*p_ready_flag) {
-                Sensor_Read(sensor, *p_mode);
+                result = Sensor_Read(sensor, *p_mode);
 
-                /* Count how many differential conversions */
+                /* Count how many differential conversions performed, for interleaving
+                 * on-chip temperature reads */
                 *p_conversions += 1;
-                if (*p_conversions < AD7746_TEMP_TRIGGER_RATE) {
-                    *p_state = STATE_TRIGGER_CAP;
-                } else {
-                    *p_state = STATE_TRIGGER_TEMPERATURE;
-                }
+
+                /* Return to idle for next event */
+                TO_STATE(STATE_IDLE);
             }
 
             break;
@@ -598,86 +617,57 @@ void Sensor_Process(sensor_name_t sensor) {
             result = Sensor_Trigger(sensor, *p_mode);
 
             if (result) {
-                /* Advance to the next state to await the conversion result, or time out */
-                *p_state = STATE_TRIGGER_TEMP_WAIT;
-            } else {
-                /* Fault the sensor, which will start waiting for it to be connected */
-                *p_state = STATE_FAULTED;
-            }
+                /* Start timing the ready signal */
+                timer_start(&timer_ready_timeout);
 
-            /* Start timing the wait state */
-            wait_state_start_tick = xTaskGetTickCount();
+                /* Advance to the next state to await the conversion result, or time out */
+                TO_STATE(STATE_TRIGGER_TEMP_WAIT);
+            } else {
+                /* Mark the sensor as disconnected and return to idle */
+                *p_cap_connected = false;
+                TO_STATE(STATE_IDLE);
+            }
 
             break;
 
         /* Await the ready flag */
         case STATE_TRIGGER_TEMP_WAIT:
 
-            /* Check for timeout after 1 second */
-            elapsed = now - wait_state_start_tick;
-            if (elapsed > 1000) {
-                *p_state = STATE_POR;
+            /* Check for ready signal timeout */
+            if (timer_expired(&timer_ready_timeout)) {
+                //TODO: count the number of timeouts?
+                TO_STATE(STATE_POR);
                 return;
             }
 
-            /* Did the conversion complete since last invocation of the state machine? */
+            /* Did the conversion complete yet? */
             if (*p_ready_flag) {
                 Sensor_Read(sensor, *p_mode);
 
-                /* Return to converting capacitances */
-                *p_state = STATE_TRIGGER_CAP;
+                /* Return to idle for next event */
+                TO_STATE(STATE_IDLE);
             }
-
             break;
 
         /* Read the temperature + humidity */
         case STATE_READ_TH:
 
-            /* How long have we been waiting? */
-            elapsed = now - th_state_start_tick;
-            *p_th_timer -= elapsed;
+            /* If a T+H sensor isn't connected, try to detect it and use it */
+            if (!(*p_th_connected)) {
 
-            /* Is it time to read? */
-            if (*p_th_timer < 0) {
-
-                /* Reload the timer for the next pass */
-                *p_th_timer = TH_REINIT_TIMEOUT_MS;
-
-                /* If a T+H sensor isn't connected, try to detect it and use it */
-                if (!(*p_th_connected)) {
-
-                    /* Detect the presence of the temperature + humidity sensor */
-                    TH_Sensor_Init(sensor);
-                }
-
-                /* If a T+H sensor is now connected do a t+h read */
-                if (*p_th_connected) {
-                    TH_Sensor_Read(sensor);
-                }
+                /* Detect the presence of the temperature + humidity sensor */
+                TH_Sensor_Init(sensor);
             }
 
-            /* Return to converting capacitances */
-            *p_state = STATE_TRIGGER_CAP;
+            /* If a T+H sensor is now connected do a t+h read */
+            if (*p_th_connected) {
+                TH_Sensor_Read(sensor);
+            }
 
+            /* Return to idle for next event */
+            TO_STATE(STATE_IDLE);
             break;
 
-
-        /* Device has faulted, restart the POR init process */
-        case STATE_FAULTED:
-
-            /* Mark the sensor as disconnected */
-            *p_connected = false;
-
-            /* Start a timer to reconnect in 1 second */
-            *p_init_wait_timer = SENSOR_REINIT_TIMEOUT_MS;
-
-            /* Start timing the wait state */
-            wait_state_start_tick = xTaskGetTickCount();
-
-            /* Enter the wait state */
-            *p_state = STATE_INIT_WAIT;
-
-            break;
     }
 }
 
@@ -736,7 +726,7 @@ static void Sensor_Task(void *pvParameters) {
         }
 #endif
 
-        // Wait for the required amount of time.
+        /* Wait for the required amount of time */
         //vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
         vTaskDelay(task_delay / portTICK_RATE_MS);
     }

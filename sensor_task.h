@@ -25,10 +25,15 @@
  */
 
 /* Attempt to re-initialize the sensor once a second */
-#define SENSOR_REINIT_TIMEOUT_MS  1000
+#define SENSOR_INIT_TIMEOUT_MS    1000
+
+/* Timeout value for the ready signal from the sensor */
+#define SENSOR_READY_TIMEOUT_MS   500
 
 /* Attempt to init the temp+humidity sensor every 10 seconds */
 #define TH_REINIT_TIMEOUT_MS      1000 //10000
+
+
 
 /* -----------------------------------------------------------------------------
  * SI7020 Temperature / Humidity sensor
@@ -183,14 +188,14 @@
 // Task state machine discrete states, separate for each sensor
 typedef enum {
     STATE_POR                   = 0,
-    STATE_INIT                  = 1,
-    STATE_INIT_WAIT             = 2,
-    STATE_TRIGGER_CAP           = 3,
-    STATE_TRIGGER_CAP_WAIT      = 4,
-    STATE_TRIGGER_TEMPERATURE   = 5,
-    STATE_TRIGGER_TEMP_WAIT     = 6,
-    STATE_READ_TH               = 7,
-    STATE_FAULTED               = 8,
+    STATE_IDLE                  = 1,
+    STATE_RESET                 = 2,
+    STATE_INIT                  = 3,
+    STATE_TRIGGER_CAP           = 4,
+    STATE_TRIGGER_CAP_WAIT      = 5,
+    STATE_TRIGGER_TEMPERATURE   = 6,
+    STATE_TRIGGER_TEMP_WAIT     = 7,
+    STATE_READ_TH               = 8,
     STATE_MAX
 } sensor_state_t;
 
@@ -264,7 +269,7 @@ typedef struct {
     bool                      disabled;
 
     /* Connection status */
-    bool                      connected;
+    bool                      ad7746_connected;
 
     /* Timer value for initialization delay (after a failed init) */
     int32_t                   init_wait_timer;
