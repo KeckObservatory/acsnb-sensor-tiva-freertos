@@ -80,9 +80,8 @@ void I2C_Init(sensor_name_t sensor) {
     /* Strobe 10 clock cycles out to it */
     for (i = 0; i < 10; i++) {
         GPIOPinWrite(port_base, scl_pin, 0);
-        //for (loop = 0; loop < 100000; loop++) {} // 20ms
-        for (loop = 0; loop < 5000; loop++) {} // 1ms
-        GPIOPinWrite(port_base, scl_pin, scl_pin);
+        for (loop = 0; loop < 5000; loop++) {} // 750us
+        GPIOPinWrite(port_base, scl_pin, 1);
         for (loop = 0; loop < 5000; loop++) {} // 750us
     }
 

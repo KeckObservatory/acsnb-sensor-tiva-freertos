@@ -111,7 +111,7 @@ bool TH_Sensor_Init(sensor_name_t sensor) {
     result4 = I2C_Receive(base, SI7020_ADDR, buf2, 6);
 
     /* If all 4 transactions completed, we can trust the results */
-    if (result1 == result2 == result3 == result4 == 0) {
+    if ((result1 + result2 + result3 + result4) == 0) {
 
         /* Assemble the ESN from the piece parts in the buffers */
         sensor_control[sensor].si7020_esn[0] = buf1[SI7020_SNA_0];
@@ -161,7 +161,7 @@ bool TH_Sensor_Read(sensor_name_t sensor) {
     result4 = I2C_Receive(base, SI7020_ADDR, buf_h, 2);
 
     /* If all 4 transactions completed, we can trust the results */
-    if (result1 == result2 == result3 == result4 == 0) {
+    if ((result1 + result2 + result3 + result4) == 0) {
 
         /* Lock the structure with the message, by taking the semaphore */
         if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
@@ -410,21 +410,19 @@ void Sensor_Process(sensor_name_t sensor) {
 
     bool result = false;
 
-    static timer_t timer_init;
-    static timer_t timer_ready_timeout;
-
-    static sensor_mode_t next_sensor_mode, last_sensor_mode = MODE_C_DIFFERENTIAL;
-
     /* Get the values used to drive the state machine from the control structure */
     sensor_state_t *p_state    = &(sensor_control[sensor].state);
     bool disabled              =   sensor_control[sensor].disabled;
     sensor_mode_t *p_mode      = &(sensor_control[sensor].mode);
+    sensor_mode_t *p_next_mode = &(sensor_control[sensor].next_mode);
+    sensor_mode_t *p_last_mode = &(sensor_control[sensor].last_mode);
     uint8_t *p_conversions     = &(sensor_control[sensor].conversions);
     bool enable_c1_c2          =   sensor_control[sensor].enable_c1_c2;
     bool *p_cap_connected      = &(sensor_control[sensor].ad7746_connected);
-    int32_t *p_init_wait_timer = &(sensor_control[sensor].init_wait_timer);
+    timer_t *p_timer_init      = &(sensor_control[sensor].timer_init);
+    timer_t *p_timer_ready     = &(sensor_control[sensor].timer_ready);
     bool *p_th_connected       = &(sensor_control[sensor].si7020_connected);
-    int32_t *p_th_timer        = &(sensor_control[sensor].si7020_timer);
+    timer_t *p_th_timer        = &(sensor_control[sensor].si7020_timer);
 
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
     bool *p_ready_flag         = sensor_io[sensor].isr_flag;
@@ -445,22 +443,22 @@ void Sensor_Process(sensor_name_t sensor) {
             *p_th_connected = false;
 
             /* Setup the initialization timer */
-            timer_set(&timer_init, SENSOR_INIT_TIMEOUT_MS);
+            timer_set(p_timer_init, SENSOR_INIT_TIMEOUT_MS);
 
             /* Expire the init timer so it happens immediately */
-            timer_expire(&timer_init);
+            timer_expire(p_timer_init);
 
             /* Setup the ready signal timer */
-            timer_set(&timer_ready_timeout, SENSOR_READY_TIMEOUT_MS);
+            timer_set(p_timer_ready, SENSOR_READY_TIMEOUT_MS);
+
+            /* Setup the temp+humidity sensor timer */
+            timer_set(p_th_timer, TH_TIMEOUT_MS);
 
             TO_STATE(STATE_IDLE);
             break;
 
         /* Check timers and run subsystems */
         case STATE_IDLE:
-
-            /* Periodically try to get the temperature and humidity */
-
 
             /* If the sensor is connected, get the capacitance */
             if (*p_cap_connected) {
@@ -469,11 +467,19 @@ void Sensor_Process(sensor_name_t sensor) {
                 if (*p_conversions < AD7746_TEMP_TRIGGER_RATE) {
                     TO_STATE(STATE_TRIGGER_CAP);
                 } else {
-                    TO_STATE(STATE_TRIGGER_TEMPERATURE);
+
+                    /* Get the temperature and humidity from the external sensor
+                     * on a periodic basis.  If it's not time yet, just read the
+                     * on-chip temperature from the AD7746. */
+                    if (timer_expired(p_th_timer)) {
+                        TO_STATE(STATE_READ_TH);
+                    } else {
+                        TO_STATE(STATE_TRIGGER_TEMPERATURE);
+                    }
                 }
 
             /* Else, try to reset+init the sensor periodically */
-            } else if (timer_expired(&timer_init)) {
+            } else if (timer_expired(p_timer_init)) {
                 TO_STATE(STATE_RESET);
             }
 
@@ -535,24 +541,24 @@ void Sensor_Process(sensor_name_t sensor) {
             if (enable_c1_c2) {
 
                 /* Set the next mode based on the last */
-                switch (last_sensor_mode) {
+                switch (*p_last_mode) {
                     case MODE_C_DIFFERENTIAL:
                     default:
-                        next_sensor_mode = MODE_C_CAP1;
+                        *p_next_mode = MODE_C_CAP1;
                         break;
 
                     case MODE_C_CAP1:
-                        next_sensor_mode = MODE_C_CAP2;
+                        *p_next_mode = MODE_C_CAP2;
                         break;
 
                     case MODE_C_CAP2:
-                        next_sensor_mode = MODE_C_DIFFERENTIAL;
+                        *p_next_mode = MODE_C_DIFFERENTIAL;
                         break;
                 }
 
                 /* Do the assignment now */
-                *p_mode = next_sensor_mode;
-                last_sensor_mode = next_sensor_mode;
+                *p_mode = *p_next_mode;
+                *p_last_mode = *p_next_mode;
 
             } else {
 
@@ -573,7 +579,7 @@ void Sensor_Process(sensor_name_t sensor) {
             }
 
             /* Start timing the ready signal */
-            timer_start(&timer_ready_timeout);
+            timer_start(p_timer_ready);
 
             break;
 
@@ -581,7 +587,7 @@ void Sensor_Process(sensor_name_t sensor) {
         case STATE_TRIGGER_CAP_WAIT:
 
             /* Check for ready signal timeout */
-            if (timer_expired(&timer_ready_timeout)) {
+            if (timer_expired(p_timer_ready)) {
                 //TODO: count the number of timeouts?
                 TO_STATE(STATE_POR);
                 return;
@@ -618,7 +624,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
             if (result) {
                 /* Start timing the ready signal */
-                timer_start(&timer_ready_timeout);
+                timer_start(p_timer_ready);
 
                 /* Advance to the next state to await the conversion result, or time out */
                 TO_STATE(STATE_TRIGGER_TEMP_WAIT);
@@ -634,7 +640,7 @@ void Sensor_Process(sensor_name_t sensor) {
         case STATE_TRIGGER_TEMP_WAIT:
 
             /* Check for ready signal timeout */
-            if (timer_expired(&timer_ready_timeout)) {
+            if (timer_expired(p_timer_ready)) {
                 //TODO: count the number of timeouts?
                 TO_STATE(STATE_POR);
                 return;
@@ -663,6 +669,9 @@ void Sensor_Process(sensor_name_t sensor) {
             if (*p_th_connected) {
                 TH_Sensor_Read(sensor);
             }
+
+            /* Restart the temp+hum reading timer */
+            timer_start(p_th_timer);
 
             /* Return to idle for next event */
             TO_STATE(STATE_IDLE);
@@ -745,12 +754,12 @@ uint32_t Sensor_Task_Init(void) {
         /* Initialize the fields to sane defaults */
         sensor_control[sensor].state           = STATE_POR;
         sensor_control[sensor].disabled        = false;
-        sensor_control[sensor].init_wait_timer = 0;
         sensor_control[sensor].relay_position  = SWITCH_LBL;
         sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].next_mode       = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].last_mode       = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].conversion_time = CONVERT_TIME_109MS;
         sensor_control[sensor].enable_c1_c2    = false;
-        sensor_control[sensor].si7020_timer    = 0;
 
         /* Initialize the I2C bus for the sensor */
         I2C_Init(sensor);
@@ -765,7 +774,7 @@ uint32_t Sensor_Task_Init(void) {
 
 
     /* Testing: disable some sensors */
-    sensor_control[SENSOR1].disabled = true;
+    //sensor_control[SENSOR1].disabled = true;
     sensor_control[SENSOR2].disabled = true;
     sensor_control[SENSOR3].disabled = true;
     sensor_control[SENSOR4].disabled = true;

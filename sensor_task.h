@@ -30,10 +30,8 @@
 /* Timeout value for the ready signal from the sensor */
 #define SENSOR_READY_TIMEOUT_MS   500
 
-/* Attempt to init the temp+humidity sensor every 10 seconds */
-#define TH_REINIT_TIMEOUT_MS      1000 //10000
-
-
+/* Attempt to read and/or init the temp+humidity sensor every 10 seconds */
+#define TH_TIMEOUT_MS             2000 //10000
 
 /* -----------------------------------------------------------------------------
  * SI7020 Temperature / Humidity sensor
@@ -271,14 +269,17 @@ typedef struct {
     /* Connection status */
     bool                      ad7746_connected;
 
-    /* Timer value for initialization delay (after a failed init) */
-    int32_t                   init_wait_timer;
+    /* Timers for the device */
+    timer_t                   timer_init;
+    timer_t                   timer_ready;
 
     /* Sensor switching */
     sensor_relay_position_t   relay_position;
 
     /* Capacitor/temperature selection mode */
     sensor_mode_t             mode;
+    sensor_mode_t             next_mode;
+    sensor_mode_t             last_mode;
 
     /* Flag that enables retrieving single-ended caps alongside differential;
      * used only for debugging because it runs the differential cap retrieval
@@ -294,7 +295,7 @@ typedef struct {
     /* Si7020 temperature+humidity sensing control */
     bool                      si7020_connected;
     uint8_t                   si7020_esn[8];
-    int32_t                   si7020_timer;
+    timer_t                   si7020_timer;
 
 } sensor_control_t;
 
