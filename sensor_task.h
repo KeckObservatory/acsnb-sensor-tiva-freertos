@@ -31,44 +31,57 @@
 #define SENSOR_READY_TIMEOUT_MS   500
 
 /* Attempt to read and/or init the temp+humidity sensor every 10 seconds */
-#define TH_TIMEOUT_MS             2000 //10000
+#define TH_TIMEOUT_MS             10000
+
+
+/* -----------------------------------------------------------------------------
+ * PCA9536 - Relay driver to switch sensor between LBL and Kona configuration
+ */
+#define PCA9536_ADDR              0x41
+#define PCA9536_OUT_PORT_REG      0x01
+#define PCA9536_OUT_PORT_RESET    0x00
+#define PCA9536_OUT_PORT_KONA     0x05
+#define PCA9536_OUT_PORT_LBL      0x0A
+#define PCA9536_CONFIG_REG        0x03
+#define PCA9536_CONFIG_ALL_OUTPUT 0x00
+
 
 /* -----------------------------------------------------------------------------
  * SI7020 Temperature / Humidity sensor
  */
-#define SI7020_ADDR          0x40
-#define SI7020_HUM_HOLD      0xE5
-#define SI7020_HUM_NO_HOLD   0xF5
-#define SI7020_TMP_HOLD      0xE3
-#define SI7020_TMP_NO_HOLD   0xF3
-#define SI7020_TMP_PREVIOUS  0xF0
-#define SI7020_RESET         0xFE
-#define SI7020_WRITE_USER_1  0xE6
-#define SI7020_WRITE_USER_2  0x51
-#define SI7020_READ_HEATER   0x11
+#define SI7020_ADDR               0x40
+#define SI7020_HUM_HOLD           0xE5
+#define SI7020_HUM_NO_HOLD        0xF5
+#define SI7020_TMP_HOLD           0xE3
+#define SI7020_TMP_NO_HOLD        0xF3
+#define SI7020_TMP_PREVIOUS       0xF0
+#define SI7020_RESET              0xFE
+#define SI7020_WRITE_USER_1       0xE6
+#define SI7020_WRITE_USER_2       0x51
+#define SI7020_READ_HEATER        0x11
 
 /* 2 byte register addresses to read the ESN */
-#define SI7020_READ_ESN1_1   0xFA
-#define SI7020_READ_ESN1_2   0x0F
-#define SI7020_READ_ESN2_1   0xFC
-#define SI7020_READ_ESN2_2   0xC9
+#define SI7020_READ_ESN1_1        0xFA
+#define SI7020_READ_ESN1_2        0x0F
+#define SI7020_READ_ESN2_1        0xFC
+#define SI7020_READ_ESN2_2        0xC9
 
 /* Offsets into the buffers from the ESN reads to get the individual
  * bytes of the ESN.  They do not arrive sequentially.  See Si7020
  * spec, page 24. */
-#define SI7020_SNA_0         6
-#define SI7020_SNA_1         4
-#define SI7020_SNA_2         2
-#define SI7020_SNA_3         0
+#define SI7020_SNA_0              6
+#define SI7020_SNA_1              4
+#define SI7020_SNA_2              2
+#define SI7020_SNA_3              0
 
-#define SI7020_SNB_0         4
-#define SI7020_SNB_1         3
-#define SI7020_SNB_2         1
-#define SI7020_SNB_3         0
+#define SI7020_SNB_0              4
+#define SI7020_SNB_1              3
+#define SI7020_SNB_2              1
+#define SI7020_SNB_3              0
 
-#define SI7013_ID            0x0D
-#define SI7020_ID            0x14
-#define SI7021_ID            0x15
+#define SI7013_ID                 0x0D
+#define SI7020_ID                 0x14
+#define SI7021_ID                 0x15
 
 /*
  * Si7020 temperature is calculated from two bytes, t0 and t1.
@@ -84,12 +97,12 @@
  */
 
 /* 99C is equal to 54396 (decimal) */
-#define SI7020_INVALID_TH    0xD4
-#define SI7020_INVALID_TL    0x7C
+#define SI7020_INVALID_TH         0xD4
+#define SI7020_INVALID_TL         0x7C
 
 /* 0% RH is equal to 3146 (decimal) */
-#define SI7020_INVALID_HH    0x0C
-#define SI7020_INVALID_HL    0x4A
+#define SI7020_INVALID_HH         0x0C
+#define SI7020_INVALID_HL         0x4A
 
 /* -----------------------------------------------------------------------------
  * AD7746 - Capacitance sensor
@@ -170,9 +183,9 @@
 #define AD7746_TEMP_TRIGGER_RATE  10   // Trigger one temperature read every 10 cap reads
 
 
-
-// -----------------------------------------------------------------------------
-// PCA9536 - Relay driver to switch back to old ACS connection
+/* -----------------------------------------------------------------------------
+ * PCA9536 - Relay driver to switch back to old ACS connection
+ */
 #define PCA9536_ADDR              0x41
 #define PCA9536_OUT_PORT_REG      0x01
 #define PCA9536_OUT_PORT_RESET    0x00
@@ -182,8 +195,9 @@
 #define PCA9536_CONFIG_ALL_OUTPUT 0x00
 
 
-/* ----------------------------------------------------------------------------- */
-// Task state machine discrete states, separate for each sensor
+/* -----------------------------------------------------------------------------
+ * Task state machine discrete states, separate for each sensor
+ */
 typedef enum {
     STATE_POR                   = 0,
     STATE_IDLE                  = 1,
@@ -197,60 +211,34 @@ typedef enum {
     STATE_MAX
 } sensor_state_t;
 
-/* ----------------------------------------------------------------------------- */
-/* PCA9536 state, sets the old/new ACS relay positions */
+/* -----------------------------------------------------------------------------
+ * PCA9536 state, sets the LBL or Kona relay positions
+ */
 typedef enum {
-    SWITCH_LBL                  = 0,
-    SWITCH_KONA                 = 1
-} sensor_relay_position_t;
+    RELAY_LBL                  = 0,
+    RELAY_KONA                 = 1
+} relay_position_t;
 
-/* ----------------------------------------------------------------------------- */
-/* Single / differential capacitance, or temperature, selection choices */
+/* -----------------------------------------------------------------------------
+ * Single / differential capacitance, or temperature, selection choices
+ */
 typedef enum {
-    MODE_C_DIFFERENTIAL       = 0,
-    MODE_C_CAP1               = 1,
-    MODE_C_CAP2               = 2,
-    MODE_TEMPERATURE          = 3
+    MODE_C_DIFFERENTIAL         = 0,
+    MODE_C_CAP1                 = 1,
+    MODE_C_CAP2                 = 2,
+    MODE_TEMPERATURE            = 3
 } sensor_mode_t;
 
-/* ----------------------------------------------------------------------------- */
-/* Capacitance conversion times selection */
+/* -----------------------------------------------------------------------------
+ * Capacitance conversion times selection
+ */
 typedef enum {
     CONVERT_TIME_109MS          = 0, // Default
     CONVERT_TIME_38MS           = 1,
     CONVERT_TIME_11MS           = 2
 } sensor_conversion_time_t;
 
-
-
-
-
-#ifdef hold
-
-// Task state data
-typedef struct {
-
-  bool            *switchcmd;
-  swRelayPositions *switchnew;
-  adCapSelect      cap;
-  adCapSelect      cap_prev;
-
-  // Time since last AD7746 interrupt
-  uint32_t         inttime;
-
-  // Count the number of AD7746 capacitance reads
-  uint32_t         capreads;
-
-  // Time since last HDC1080 read
-  bool             hdc1080initialized;
-  uint32_t         temptime;
-
-} taskParams;
-
-#endif
-
-
-/*
+/* -----------------------------------------------------------------------------
  * This structure contains the sensor state and latest values of the capacitance,
  * temperature, humidity, and chip temperature. *
  */
@@ -274,7 +262,7 @@ typedef struct {
     timer_t                   timer_ready;
 
     /* Sensor switching */
-    sensor_relay_position_t   relay_position;
+    relay_position_t          relay_position;
 
     /* Capacitor/temperature selection mode */
     sensor_mode_t             mode;
@@ -297,16 +285,20 @@ typedef struct {
     uint8_t                   si7020_esn[8];
     timer_t                   si7020_timer;
 
+    bool                      toggle;
+
 } sensor_control_t;
 
 EXTERN sensor_control_t sensor_control[MAX_SENSORS];
-
 
 
 /* -----------------------------------------------------------------------------
  * Function prototypes
  */
 
+EXTERN bool Relay_Init(sensor_name_t sensor);
+EXTERN bool TH_Sensor_Init(sensor_name_t sensor);
+EXTERN bool TH_Sensor_Read(sensor_name_t sensor);
 EXTERN bool Sensor_Reset(sensor_name_t sensor);
 EXTERN bool Sensor_Init(sensor_name_t sensor);
 EXTERN bool Sensor_Trigger(sensor_name_t sensor, sensor_mode_t cap_mode);

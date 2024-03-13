@@ -11,17 +11,10 @@
 #define SENSOR_DRIVER_C_
 #include "includes.h"
 
-//*****************************************************************************
-//! Indicates whether or not the I2C bus has timed out.
-//!
-//! \param ui32Base is the base address of the I2C module.
-//!
-//! This function returns an indication of whether or not the I2C bus has time
-//!  out.  The I2C Master Timeout Value must be set.
-//!
-//! \return Returns \b true if the I2C bus has timed out; otherwise, returns
-//! \b false.
-//*****************************************************************************
+/* -----------------------------------------------------------------------------
+ * This function returns an indication of whether or not the I2C bus has timed
+ * out.  The I2C Master Timeout Value must be set.
+ */
 bool I2C_Master_Timeout(uint32_t ui32Base) {
 
     // Return the bus timeout status

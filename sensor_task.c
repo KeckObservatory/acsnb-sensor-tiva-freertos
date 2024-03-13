@@ -15,68 +15,68 @@
 #define SENSOR_ITEM_SIZE           sizeof(uint8_t)
 #define SENSOR_QUEUE_SIZE          5
 
-
-#ifdef zero
-
 /* -----------------------------------------------------------------------------
- * Read the SI7020 temperature/humidity sensor.
+ * Initialize the PCA9536 relay switching driver.
  */
-bool TH_Sensor_Read(sensor_name_t sensor) {
-    uint8_t         txBuffer[1];
-    uint8_t         rxBuffer[2];
-    float t, h;
+bool Relay_Init(sensor_name_t sensor) {
 
-    /* Read Si7020 Si7020Temp */
-    txBuffer[0]                 = Si7020_TMP_HOLD;
-    i2cTransaction.slaveAddress = Si7020_ADDR;
-    i2cTransaction.writeBuf     = txBuffer;
-    i2cTransaction.writeCount   = 1;
-    i2cTransaction.readBuf      = rxBuffer;
-    i2cTransaction.readCount    = 2;
-    if (!I2C_transfer(i2c, &i2cTransaction))
-    {
-    System_printf("readSi7020: Error 1\n");
-    System_flush();
-    return -1;
-    }
-    //Si7020Temp = (float)((rxBuffer[0] << 8) + (rxBuffer[1]))*175.2/65536-46.85;
-    t = (float)((rxBuffer[0] << 8) + (rxBuffer[1]))*175.72/65536-46.85;
+    int8_t result;
+    uint8_t buf[2] = {0, 0};
+    uint32_t base = sensor_io[sensor].periph_base;
 
-    spiMessageOut.msg.sensor[device].tempHigh     = rxBuffer[0];
-    spiMessageOut.msg.sensor[device].tempLow      = rxBuffer[1];
+    /* Configure the relay switch */
+    buf[0] = PCA9536_OUT_PORT_REG;
+    buf[1] = PCA9536_OUT_PORT_RESET;
+    result = I2C_Send(base, PCA9536_ADDR, buf, 2);
+    if (result < 0) return false;
 
-    /* Read Si7020 Si7020Hum */
-    txBuffer[0]                 = Si7020_HUM_HOLD;
-    i2cTransaction.slaveAddress = Si7020_ADDR;
-    i2cTransaction.writeBuf     = txBuffer;
-    i2cTransaction.writeCount   = 1;
-    i2cTransaction.readBuf      = rxBuffer;
-    i2cTransaction.readCount    = 2;
-    if (!I2C_transfer(i2c, &i2cTransaction))
-    {
-    System_printf("readSi7020: Error 2\n");
-    System_flush();
-    return -1;
-    }
+    /* Set all ports as outputs */
+    buf[0] = PCA9536_CONFIG_REG;
+    buf[1] = PCA9536_CONFIG_ALL_OUTPUT;
+    result = I2C_Send(base, PCA9536_ADDR, buf, 2);
+    if (result < 0) return false;
 
-    //h = (float)((rxBuffer[0] << 8) + (rxBuffer[1]))*125/65536-6;
-
-    /* Lock the structure with the message, by taking the semaphore */
-    if (xSemaphoreTake(g_txMessageSemaphore, portMAX_DELAY) == pdTRUE) {
-
-        tx_message.msg.sensor[sensor].diff_cap_high = buf[1];
-        tx_message.msg.sensor[sensor].diff_cap_mid  = buf[2];
-        tx_message.msg.sensor[sensor].diff_cap_low  = buf[3];
-
-        /* Release the semaphore */
-        xSemaphoreGive(g_txMessageSemaphore);
-    }
-
-    /* If we got this far, read was successful */
+    /* If we got this far, reset was successful */
     return true;
 }
-#endif
 
+/* -----------------------------------------------------------------------------
+ * Switch the relays to either LBL or Kona mode.
+ */
+bool Relay_Set(sensor_name_t sensor, relay_position_t relay) {
+
+    int8_t result;
+    uint8_t buf[2] = {0, 0};
+    uint32_t base = sensor_io[sensor].periph_base;
+
+    buf[0] = PCA9536_OUT_PORT_REG;
+
+    /* Set it to LBL or Kona position */
+    switch (relay) {
+        case RELAY_LBL:
+        default:
+            buf[1] = PCA9536_OUT_PORT_LBL;
+            break;
+
+        case RELAY_KONA:
+            buf[1] = PCA9536_OUT_PORT_KONA;
+            break;
+    }
+
+    /* Send the command */
+    result = I2C_Send(base, PCA9536_ADDR, buf, 2);
+    if (result < 0) return false;
+
+    /* Hold the relay state for 100ms before resetting the driver */
+    vTaskDelay(100);
+
+    buf[1] = PCA9536_OUT_PORT_RESET;
+    result = I2C_Send(base, PCA9536_ADDR, buf, 2);
+    if (result < 0) return false;
+
+    /* If we got this far, setting the relay was successful */
+    return true;
+}
 
 
 /* -----------------------------------------------------------------------------
@@ -201,10 +201,6 @@ bool TH_Sensor_Read(sensor_name_t sensor) {
     /* If we got this far, read was successful */
     return true;
 }
-
-
-
-
 
 
 /* -----------------------------------------------------------------------------
@@ -409,6 +405,7 @@ void Sensor_Process(sensor_name_t sensor) {
 #define TO_STATE(s) (*p_state = s)
 
     bool result = false;
+    bool result2 = false;
 
     /* Get the values used to drive the state machine from the control structure */
     sensor_state_t *p_state    = &(sensor_control[sensor].state);
@@ -423,11 +420,13 @@ void Sensor_Process(sensor_name_t sensor) {
     timer_t *p_timer_ready     = &(sensor_control[sensor].timer_ready);
     bool *p_th_connected       = &(sensor_control[sensor].si7020_connected);
     timer_t *p_th_timer        = &(sensor_control[sensor].si7020_timer);
+    relay_position_t *relay    = &(sensor_control[sensor].relay_position);
+
+    /* For testing */
+    bool *p_toggle             = &(sensor_control[sensor].toggle);
 
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
     bool *p_ready_flag         = sensor_io[sensor].isr_flag;
-
-    //sensor_relay_position_t relay_position = sensor_control[sensor].relay_position;
 
     /* Don't process disabled sensors */
     if (disabled) return;
@@ -483,6 +482,9 @@ void Sensor_Process(sensor_name_t sensor) {
                 TO_STATE(STATE_RESET);
             }
 
+            /* If the relay position demand has changed, set them */
+            //Relay_Set(sensor, PCA9536_OUT_PORT_LBL);
+
             break;
 
         /* Reset the AD7746 device.  Note: this must occur in its own state, in order to give
@@ -513,16 +515,22 @@ void Sensor_Process(sensor_name_t sensor) {
 
             break;
 
-        /* Initialize the I2C devices (cap sensor, t+h sensor) */
+        /* Initialize the I2C devices (cap sensor, cap relays) */
         case STATE_INIT:
 
             /* Try to init the sensor */
             result = Sensor_Init(sensor);
 
-            if (!result) {
-                /* Mark the sensor as disconnected before returning to idle */
+            /* Attempt to init the switching relay */
+            result2 = Relay_Init(sensor);
+
+            /* If either fail, mark the sensor as disconnected before returning to idle  */
+            if ((!result) || (!result2)) {
                 *p_cap_connected = false;
             }
+
+            /* Set the relays to the last known desired state */
+            Relay_Set(sensor, *relay);
 
             /* Always go back to idle so the timers can run */
             TO_STATE(STATE_IDLE);
@@ -658,6 +666,15 @@ void Sensor_Process(sensor_name_t sensor) {
         /* Read the temperature + humidity */
         case STATE_READ_TH:
 
+#ifdef demo
+            if (*p_toggle) {
+                Relay_Set(sensor, RELAY_KONA);
+            } else {
+                Relay_Set(sensor, RELAY_LBL);
+            }
+            *p_toggle = !*p_toggle;
+#endif
+
             /* If a T+H sensor isn't connected, try to detect it and use it */
             if (!(*p_th_connected)) {
 
@@ -736,8 +753,8 @@ static void Sensor_Task(void *pvParameters) {
 #endif
 
         /* Wait for the required amount of time */
-        //vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
-        vTaskDelay(task_delay / portTICK_RATE_MS);
+        vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
+        //vTaskDelay(task_delay / portTICK_RATE_MS);
     }
 }
 
@@ -754,12 +771,13 @@ uint32_t Sensor_Task_Init(void) {
         /* Initialize the fields to sane defaults */
         sensor_control[sensor].state           = STATE_POR;
         sensor_control[sensor].disabled        = false;
-        sensor_control[sensor].relay_position  = SWITCH_LBL;
+        sensor_control[sensor].relay_position  = RELAY_LBL;
         sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].next_mode       = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].last_mode       = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].conversion_time = CONVERT_TIME_109MS;
         sensor_control[sensor].enable_c1_c2    = false;
+        sensor_control[sensor].toggle          = false;
 
         /* Initialize the I2C bus for the sensor */
         I2C_Init(sensor);
