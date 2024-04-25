@@ -64,6 +64,7 @@ void I2C_Init(sensor_name_t sensor) {
      * This can and will eventually occur when a sensor is hot plugged!
      */
 
+
     /* Disable the I2C bus, we're about to rip its I/O lines away */
     SysCtlPeripheralDisable(peripheral);
 

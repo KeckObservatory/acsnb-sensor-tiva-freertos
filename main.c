@@ -199,6 +199,9 @@ uint32_t stopwatch_elapsed_ms(stopwatch_t* stopwatch) {
  */
 int main(void) {
 
+    uint32_t loop;
+    uint8_t pins1, pins2;
+
     /* Set the clocking to run at 80 MHz from the PLL */
     ROM_SysCtlClockSet(SYSCTL_SYSDIV_2_5 | SYSCTL_USE_PLL | SYSCTL_XTAL_16MHZ | SYSCTL_OSC_MAIN);
 
@@ -212,6 +215,28 @@ int main(void) {
 
     // TBD - this code never sleeps so this call is moot
     //SysCtlPeripheralClockGating(true);
+
+
+#ifdef SENSOR_CLOCK_DATA_TEST
+    pins1 = GPIO_PIN_6 | GPIO_PIN_7;
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOB);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOB)) {}
+    GPIOPinTypeGPIOOutput(GPIO_PORTB_BASE, pins1);
+
+    pins2 = GPIO_PIN_0 | GPIO_PIN_1 | GPIO_PIN_2 | GPIO_PIN_3;
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOG);
+    while (!SysCtlPeripheralReady(SYSCTL_PERIPH_GPIOG)) {}
+    GPIOPinTypeGPIOOutput(GPIO_PORTG_BASE, pins2);
+
+    while (1) {
+        GPIOPinWrite(GPIO_PORTB_BASE, pins1, 0);
+        GPIOPinWrite(GPIO_PORTG_BASE, pins2, 0);
+        for (loop = 0; loop < 5000; loop++) {} // 750us
+        GPIOPinWrite(GPIO_PORTB_BASE, pins1, pins1);
+        GPIOPinWrite(GPIO_PORTG_BASE, pins2, pins2);
+        for (loop = 0; loop < 5000; loop++) {} // 750us
+    }
+#endif
 
     /* Setup the interrupt service routines for the GPIO lines */
     GPIO_Setup_ISR();

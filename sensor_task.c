@@ -793,10 +793,10 @@ uint32_t Sensor_Task_Init(void) {
 
     /* Testing: disable some sensors */
     //sensor_control[SENSOR1].disabled = true;
-    sensor_control[SENSOR2].disabled = true;
-    sensor_control[SENSOR3].disabled = true;
-    sensor_control[SENSOR4].disabled = true;
-    sensor_control[SENSOR5].disabled = true;
+    //sensor_control[SENSOR2].disabled = true;
+    //sensor_control[SENSOR3].disabled = true;
+    //sensor_control[SENSOR4].disabled = true;
+    //sensor_control[SENSOR5].disabled = true;
     //sensor_control[SENSOR6].disabled = true;
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
