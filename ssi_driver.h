@@ -20,19 +20,11 @@
 
 #include "includes.h"
 
-/* Variables and pointers used */
-EXTERN uint8_t *SSI0_rx_pointer;
-EXTERN uint8_t *SSI0_tx_pointer;
-EXTERN uint8_t *SSI0_tx_dma_pointer;
-EXTERN bool *SSI0_msg_ready;
-EXTERN uint16_t SSI0_data_length;
-
-
 /* -----------------------------------------------------------------------------
  * Function prototypes
  */
 EXTERN void SSI0SlaveSelectIntHandler(void);
-EXTERN void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint8_t tx_dma_buffer[], uint16_t length, bool *msg_ready);
+EXTERN void SSI0Init(void);
 EXTERN void SSI0Interrupt(void);
 EXTERN void SSI0SendMessage(void);
 EXTERN void SSI0InitTransfer(void);

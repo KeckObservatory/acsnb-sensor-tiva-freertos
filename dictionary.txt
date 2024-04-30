@@ -2,3 +2,6 @@ keck
 paul
 richards
 init
+outbound
+heartbeat
+beaglebone

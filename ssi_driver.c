@@ -14,17 +14,16 @@
 /* -----------------------------------------------------------------------------
  * Initialize the SSI0 device.
  */
-void SSI0Init(uint8_t rx_buffer[], uint8_t tx_buffer[], uint8_t tx_dma_buffer[], uint16_t length, bool *msg_ready) {
+void SSI0Init(void) {
 
     uint32_t trashBin[1] = {0};
 
     /* Initialize flags for receiving message */
-    SSI0_rx_pointer = &rx_buffer[0];
-    SSI0_tx_pointer = &tx_buffer[0];
-    SSI0_tx_dma_pointer = &tx_dma_buffer[0];
-    SSI0_msg_ready = msg_ready;
-
-    SSI0_data_length = length;
+    //SSI0_rx_pointer = &rx_buffer[0];
+    //SSI0_tx_pointer = &tx_buffer[0];
+    //SSI0_tx_dma_pointer = &tx_dma_buffer[0];
+    //SSI0_msg_ready = msg_ready;
+    //SSI0_data_length = length;
 
     /* Enable the uDMA and SSI0 peripherals */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_UDMA);
@@ -124,8 +123,8 @@ void SSI0InitTransfer(void) {
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
                            UDMA_MODE_BASIC,
                            (void *)(SSI0_BASE + SSI_O_DR),
-                           SSI0_rx_pointer,
-                           SSI0_data_length);
+                           rx_message_in_p,
+                           SSI_MESSAGE_LENGTH);
 
     //****************************************************************************
     // uDMA SSI0 TX
@@ -154,9 +153,9 @@ void SSI0InitTransfer(void) {
        data register. */
     uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
                            UDMA_MODE_BASIC,
-                           SSI0_tx_dma_pointer,
+                           tx_message_dma_p,
                            (void *)(SSI0_BASE + SSI_O_DR),
-                           SSI0_data_length);
+                           SSI_MESSAGE_LENGTH);
 
     /* Now both the uDMA SSI0 TX and RX channels are primed to start a
        transfer.  As soon as the channels are enabled, the peripheral will

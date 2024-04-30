@@ -169,10 +169,10 @@ bool TH_Sensor_Read(sensor_name_t sensor) {
             /* We got the lock and can now work with the message exclusively
              * to update the outgoing message with the new values */
 
-            tx_message.msg.sensor[sensor].temp_high     = buf_t[0];
-            tx_message.msg.sensor[sensor].temp_low      = buf_t[1];
-            tx_message.msg.sensor[sensor].humidity_high = buf_h[0];
-            tx_message.msg.sensor[sensor].humidity_low  = buf_h[1];
+            tx_message_raw.msg.sensor[sensor].temp_high     = buf_t[0];
+            tx_message_raw.msg.sensor[sensor].temp_low      = buf_t[1];
+            tx_message_raw.msg.sensor[sensor].humidity_high = buf_h[0];
+            tx_message_raw.msg.sensor[sensor].humidity_low  = buf_h[1];
 
             /* Release the semaphore */
             xSemaphoreGive(g_txMessageSemaphore);
@@ -186,10 +186,10 @@ bool TH_Sensor_Read(sensor_name_t sensor) {
             /* We got the lock and can now work with the message exclusively
              * to update the outgoing message with the new values */
 
-            tx_message.msg.sensor[sensor].temp_high     = SI7020_INVALID_TH;
-            tx_message.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
-            tx_message.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
-            tx_message.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
+            tx_message_raw.msg.sensor[sensor].temp_high     = SI7020_INVALID_TH;
+            tx_message_raw.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
+            tx_message_raw.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
+            tx_message_raw.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
 
             /* Release the semaphore */
             xSemaphoreGive(g_txMessageSemaphore);
@@ -356,30 +356,30 @@ bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
           /* Differential capacitor value */
           case MODE_C_DIFFERENTIAL:
-              tx_message.msg.sensor[sensor].diff_cap_high = buf[1];
-              tx_message.msg.sensor[sensor].diff_cap_mid  = buf[2];
-              tx_message.msg.sensor[sensor].diff_cap_low  = buf[3];
+              tx_message_raw.msg.sensor[sensor].diff_cap_high = buf[1];
+              tx_message_raw.msg.sensor[sensor].diff_cap_mid  = buf[2];
+              tx_message_raw.msg.sensor[sensor].diff_cap_low  = buf[3];
               break;
 
           /* Single C1 value */
           case MODE_C_CAP1:
-              tx_message.msg.sensor[sensor].c1_high = buf[1];
-              tx_message.msg.sensor[sensor].c1_mid  = buf[2];
-              tx_message.msg.sensor[sensor].c1_low  = buf[3];
+              tx_message_raw.msg.sensor[sensor].c1_high = buf[1];
+              tx_message_raw.msg.sensor[sensor].c1_mid  = buf[2];
+              tx_message_raw.msg.sensor[sensor].c1_low  = buf[3];
               break;
 
           /* Single C2 value */
           case MODE_C_CAP2:
-              tx_message.msg.sensor[sensor].c2_high = buf[1];
-              tx_message.msg.sensor[sensor].c2_mid  = buf[2];
-              tx_message.msg.sensor[sensor].c2_low  = buf[3];
+              tx_message_raw.msg.sensor[sensor].c2_high = buf[1];
+              tx_message_raw.msg.sensor[sensor].c2_mid  = buf[2];
+              tx_message_raw.msg.sensor[sensor].c2_low  = buf[3];
               break;
 
           /* Temperature conversion */
           case MODE_TEMPERATURE:
-              tx_message.msg.sensor[sensor].chip_temp_high = buf[4];
-              tx_message.msg.sensor[sensor].chip_temp_mid  = buf[5];
-              tx_message.msg.sensor[sensor].chip_temp_low  = buf[6];
+              tx_message_raw.msg.sensor[sensor].chip_temp_high = buf[4];
+              tx_message_raw.msg.sensor[sensor].chip_temp_mid  = buf[5];
+              tx_message_raw.msg.sensor[sensor].chip_temp_low  = buf[6];
               break;
 
           /* No default applies to this switch block */
@@ -407,9 +407,15 @@ void Sensor_Process(sensor_name_t sensor) {
     bool result = false;
     bool result2 = false;
 
+    /* Don't process disabled sensors */
+    if (sensor_control[sensor].disabled) {
+        tx_message_raw.msg.sensor[sensor].sensor_connected = false;
+        tx_message_raw.msg.sensor[sensor].th_connected = false;
+        return;
+    }
+
     /* Get the values used to drive the state machine from the control structure */
     sensor_state_t *p_state    = &(sensor_control[sensor].state);
-    bool disabled              =   sensor_control[sensor].disabled;
     sensor_mode_t *p_mode      = &(sensor_control[sensor].mode);
     sensor_mode_t *p_next_mode = &(sensor_control[sensor].next_mode);
     sensor_mode_t *p_last_mode = &(sensor_control[sensor].last_mode);
@@ -428,8 +434,10 @@ void Sensor_Process(sensor_name_t sensor) {
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
     bool *p_ready_flag         = sensor_io[sensor].isr_flag;
 
-    /* Don't process disabled sensors */
-    if (disabled) return;
+    /* Update the outbound message fields */
+    tx_message_raw.msg.sensor[sensor].sensor_connected = *p_cap_connected;
+    tx_message_raw.msg.sensor[sensor].th_connected     = *p_th_connected;
+
 
     switch (*p_state) {
 
@@ -753,8 +761,8 @@ static void Sensor_Task(void *pvParameters) {
 #endif
 
         /* Wait for the required amount of time */
-        vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
-        //vTaskDelay(task_delay / portTICK_RATE_MS);
+        //vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
+        vTaskDelay(task_delay / portTICK_RATE_MS);
     }
 }
 
@@ -784,20 +792,22 @@ uint32_t Sensor_Task_Init(void) {
 
         /* Set sane defaults in the messaging for the values, no need to
          * try to lock the message here as it will not be used yet */
-        tx_message.msg.sensor[sensor].temp_high     = SI7020_INVALID_TH;
-        tx_message.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
-        tx_message.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
-        tx_message.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
+        tx_message_raw.msg.sensor[sensor].temp_high     = SI7020_INVALID_TH;
+        tx_message_raw.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
+        tx_message_raw.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
+        tx_message_raw.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
     }
 
 
     /* Testing: disable some sensors */
-    //sensor_control[SENSOR1].disabled = true;
-    //sensor_control[SENSOR2].disabled = true;
-    //sensor_control[SENSOR3].disabled = true;
-    //sensor_control[SENSOR4].disabled = true;
-    //sensor_control[SENSOR5].disabled = true;
+    sensor_control[SENSOR1].disabled = true;
+    sensor_control[SENSOR2].disabled = true;
+    sensor_control[SENSOR3].disabled = true;
+    sensor_control[SENSOR4].disabled = true;
+    sensor_control[SENSOR5].disabled = true;
     //sensor_control[SENSOR6].disabled = true;
+
+    sensor_control[SENSOR6].enable_c1_c2 = true;
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {

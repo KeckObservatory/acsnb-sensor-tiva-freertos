@@ -126,29 +126,29 @@ void GPIO_PortA_Int_Handler(void) {
         SSIConfigSetExpClk(SSI0_BASE, SysCtlClockGet(), SSI_FRF_MOTO_MODE_3, SSI_MODE_SLAVE, 5000000, 8);
         SSIEnable(SSI0_BASE);
 
-        /* Copy the outbound message to the buffer the DMA will read from */
-        memcpy(SSI0_tx_dma_pointer, SSI0_tx_pointer, SSI_MESSAGE_LENGTH);
+        /* Copy the next outbound message to the buffer the DMA will read from */
+        memcpy(tx_message_dma_p, tx_message_out_p, SSI_MESSAGE_LENGTH);
 
         /* SSI0 is fully reset.  Drive a new DMA transfer of the buffer */
         uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
                                    UDMA_MODE_BASIC,
                                    (void *)(SSI0_BASE + SSI_O_DR),
-                                   SSI0_rx_pointer,
-                                   SSI0_data_length);
+                                   rx_message_in_p,
+                                   SSI_MESSAGE_LENGTH);
         uDMAChannelEnable(UDMA_CHANNEL_SSI0RX);
 
         uDMAChannelTransferSet(UDMA_CHANNEL_SSI0TX | UDMA_PRI_SELECT,
                                    UDMA_MODE_BASIC,
-                                   SSI0_tx_dma_pointer,
+                                   tx_message_dma_p,
                                    (void *)(SSI0_BASE + SSI_O_DR),
-                                   SSI0_data_length);
+                                   SSI_MESSAGE_LENGTH);
         uDMAChannelEnable(UDMA_CHANNEL_SSI0TX);
 
-        /* Enable the DMA transfer */
+        /* Enable the next DMA transfer */
         SSIDMAEnable(SSI0_BASE, SSI_DMA_RX | SSI_DMA_TX);
 
         /* Set the flag that the message has been received */
-        *SSI0_msg_ready = true;
+        rxtx_message_ready = true;
     }
 
     /* Clear the interrupt */

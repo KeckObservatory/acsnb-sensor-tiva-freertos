@@ -41,33 +41,38 @@ bool SSI_Load_Message(void) {
         memcpy(rx_message.buf, rx_message_in.buf, SSI_MESSAGE_LENGTH);
 
         /* Create the header for the outbound message */
-        tx_message.msg.size = SSI_MESSAGE_LENGTH;
-        tx_message.msg.version0 = FIRMWARE_REV_0;
-        tx_message.msg.version1 = FIRMWARE_REV_1;
-        tx_message.msg.version2 = FIRMWARE_REV_2;
+        tx_message_raw.msg.size = SSI_MESSAGE_LENGTH;
+        tx_message_raw.msg.version0 = FIRMWARE_REV_0;
+        tx_message_raw.msg.version1 = FIRMWARE_REV_1;
+        tx_message_raw.msg.version2 = FIRMWARE_REV_2;
 
         /* Update the RTOS tick value for the next outbound message, as
          * a heartbeat function. */
-        tx_message.msg.tick_count = xTaskGetTickCount();
+        tx_message_raw.msg.tick_count = xTaskGetTickCount();
 
         /* Start with a checksum of 0 before we calculate the real value, so
          * as to not affect the calculation! */
-        tx_message.msg.checksum = 0;
+        tx_message_raw.msg.checksum = 0;
 
         /* Set the checksum in the outbound message */
         for (i = 0, checksum = 0; i < SSI_MESSAGE_LENGTH; i++) {
-            checksum += tx_message.buf[i];
+            checksum += tx_message_raw.buf[i];
         }
 
         /* Take the 2's complement of the sum and put it back in the message */
-        tx_message.msg.checksum = ~checksum + 1;
+        tx_message_raw.msg.checksum = ~checksum + 1;
 
         /* Copy the next outbound message to the storage the SSI+DMA will
          * use to transmit it */
-        memcpy(tx_message_out.buf, tx_message.buf, SSI_MESSAGE_LENGTH);
+        memcpy(tx_message_out_p, tx_message_raw_p, SSI_MESSAGE_LENGTH);
 
         /* Release the semaphore */
         xSemaphoreGive(g_txMessageSemaphore);
+
+    } else {
+
+        /* Could not get the lock, return and try again later */
+        return false;
     }
 
     /* If the semaphore is not obtained, something terrible has happened; in
@@ -130,6 +135,7 @@ static void SSI_Task(void *pvParameters) {
 
         /* Wait for the required amount of time */
         vTaskDelayUntil(&wake_time, task_delay / portTICK_RATE_MS);
+        //vTaskDelay(task_delay / portTICK_RATE_MS);
     }
 }
 
@@ -145,7 +151,7 @@ uint32_t SSI_Task_Init(void) {
     SSI_Load_Message();
 
     /* Init the SSI0 device for DMA usage */
-    SSI0Init(rx_message.buf, tx_message_out.buf, tx_message_out_dmabuf, SSI_MESSAGE_LENGTH, &rxtx_message_ready);
+    SSI0Init();
 
     /* Enable the uDMA controller error interrupt.  This interrupt will occur
        if there is a bus error during a transfer */
@@ -157,7 +163,7 @@ uint32_t SSI_Task_Init(void) {
     /* Point at the control table to use for channel control structures */
     uDMAControlBaseSet(pui8ControlTable);
 
-    /* Initialize the uDMA SSI transfers */
+    /* Initialize the first uDMA SSI transfer */
     SSI0InitTransfer();
 
     /* Create the RTOS task */

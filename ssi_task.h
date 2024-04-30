@@ -93,15 +93,19 @@ typedef struct {
 /* Message is 5+4+(6*18) = 117 bytes long */
 #define SSI_MESSAGE_LENGTH sizeof(tx_message_t)
 
-/* Wrap the message with an array of bytes */
+/* Wrap the message with an array of bytes.  Make 3 copies of this:
+ *
+ * tx_message_raw is used to create the outbound message contents across various threads
+ * tx_message_out is primed with a full checksummed message ready to go out
+ * tx_message_dma is a copy of the checksummed message provided to the DMA engine  */
 EXTERN union {
     uint8_t      buf[SSI_MESSAGE_LENGTH];
     tx_message_t msg;
-} tx_message, tx_message_out;
+} tx_message_raw, tx_message_out, tx_message_dma;
 
-/* TODO: this is a bit of a hack to double buffer the message so the DMA can
- * send it without risk of it being changed out from underneath */
-EXTERN uint8_t tx_message_out_dmabuf[SSI_MESSAGE_LENGTH];
+#define tx_message_raw_p (&tx_message_raw.buf[0])
+#define tx_message_out_p (&tx_message_out.buf[0])
+#define tx_message_dma_p (&tx_message_dma.buf[0])
 
 /* Message from the Beaglebone to the TIVA */
 typedef struct {
@@ -123,6 +127,9 @@ EXTERN union {
     uint8_t      buf[SSI_MESSAGE_LENGTH];
     rx_message_t msg;
 } rx_message, rx_message_in;
+
+#define rx_message_p (&rx_message.buf[0])
+#define rx_message_in_p (&rx_message_in.buf[0])
 
 EXTERN bool rxtx_message_ready;
 
