@@ -55,33 +55,39 @@ typedef struct {
         /* [0] Status of the AD7746 sensor */
         uint8_t sensor_connected;
 
-        /* [1] Status of the temp/humidity sensing device */
+        /* [1] Status of the single ended sensing */
+        uint8_t single_ended_enabled;
+
+        /* [2] State of the relay */
+        uint8_t relay_state;
+
+        /* [3] Status of the temp/humidity sensing device */
         uint8_t th_connected;
 
-        /* [2,3] Temperature */
+        /* [4,5] Temperature */
         uint8_t temp_high;
         uint8_t temp_low;
 
-        /* [4,5] Humidity */
+        /* [6,7] Humidity */
         uint8_t humidity_high;
         uint8_t humidity_low;
 
-        /* [6,7,8] Differential capacitance, a 24 bit value */
+        /* [8,9,10] Differential capacitance, a 24 bit value */
         uint8_t diff_cap_high;
         uint8_t diff_cap_mid;
         uint8_t diff_cap_low;
 
-        /* [9,10,11] C1 cap single capacitance */
+        /* [11,12,13] C1 cap single capacitance */
         uint8_t c1_high;
         uint8_t c1_mid;
         uint8_t c1_low;
 
-        /* [12,13,14] C2 cap single capacitance */
+        /* [14,15,16] C2 cap single capacitance */
         uint8_t c2_high;
         uint8_t c2_mid;
         uint8_t c2_low;
 
-        /* [15,16,17] On-chip temperature from the capacitance sensor */
+        /* [17,18,19] On-chip temperature from the capacitance sensor */
         uint8_t chip_temp_high;
         uint8_t chip_temp_mid;
         uint8_t chip_temp_low;
@@ -110,14 +116,36 @@ EXTERN union {
 /* Message from the Beaglebone to the TIVA */
 typedef struct {
 
-    /* First 4 bytes are used for commanding the device */
-    uint8_t cmd0;
-    uint8_t cmd1;
-    uint8_t cmd2;
-    uint8_t cmd3;
+    /* 5 bytes of Header information first */
+    uint8_t checksum;
+    uint8_t size;
 
-    /* Subsequent bytes are for settings that are broadcast every messaging cycle */
-    uint8_t use_fast_conversion_time;
+    /* A pattern that must be provided by the sender; 0xDEADBEEF */
+    uint32_t key;
+
+    /* Sensor enable settings (booleans; 0 = disable, 1 = enable) */
+    uint8_t enable_sensor1;
+    uint8_t enable_sensor2;
+    uint8_t enable_sensor3;
+    uint8_t enable_sensor4;
+    uint8_t enable_sensor5;
+    uint8_t enable_sensor6;
+
+    /* Sensor single ended mode settings (booleans; 0 = disable, 1 = enable) */
+    uint8_t enable_single1;
+    uint8_t enable_single2;
+    uint8_t enable_single3;
+    uint8_t enable_single4;
+    uint8_t enable_single5;
+    uint8_t enable_single6;
+
+    /* Relay settings (relay_position_t; 0 = LBL, 1 = Kona) */
+    uint8_t relay1;
+    uint8_t relay2;
+    uint8_t relay3;
+    uint8_t relay4;
+    uint8_t relay5;
+    uint8_t relay6;
 
 } __attribute__((packed)) rx_message_t;
 
@@ -130,6 +158,11 @@ EXTERN union {
 
 #define rx_message_p (&rx_message.buf[0])
 #define rx_message_in_p (&rx_message_in.buf[0])
+
+/* This key pattern must be supplied in messages from the Beaglebone on the SPI for it
+ * to be considered valid.  This prevents messages that are all 0x00 from causing changes
+ * to the settings. */
+#define RX_MESSAGE_KEY 0xDEADBEEF
 
 EXTERN bool rxtx_message_ready;
 

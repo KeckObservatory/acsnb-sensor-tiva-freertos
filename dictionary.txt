@@ -5,3 +5,5 @@ init
 outbound
 heartbeat
 beaglebone
+kona
+struct

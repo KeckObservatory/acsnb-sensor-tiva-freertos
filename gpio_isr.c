@@ -129,6 +129,9 @@ void GPIO_PortA_Int_Handler(void) {
         /* Copy the next outbound message to the buffer the DMA will read from */
         memcpy(tx_message_dma_p, tx_message_out_p, SSI_MESSAGE_LENGTH);
 
+        /* Copy the inbound message from the in buffer to a location it won't be overwritten */
+        memcpy(rx_message_p, rx_message_in_p, SSI_MESSAGE_LENGTH);
+
         /* SSI0 is fully reset.  Drive a new DMA transfer of the buffer */
         uDMAChannelTransferSet(UDMA_CHANNEL_SSI0RX | UDMA_PRI_SELECT,
                                    UDMA_MODE_BASIC,

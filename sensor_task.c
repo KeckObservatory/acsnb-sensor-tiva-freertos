@@ -43,7 +43,7 @@ bool Relay_Init(sensor_name_t sensor) {
 /* -----------------------------------------------------------------------------
  * Switch the relays to either LBL or Kona mode.
  */
-bool Relay_Set(sensor_name_t sensor, relay_position_t relay) {
+bool Relay_Set(sensor_name_t sensor, relay_position_t position) {
 
     int8_t result;
     uint8_t buf[2] = {0, 0};
@@ -52,7 +52,7 @@ bool Relay_Set(sensor_name_t sensor, relay_position_t relay) {
     buf[0] = PCA9536_OUT_PORT_REG;
 
     /* Set it to LBL or Kona position */
-    switch (relay) {
+    switch (position) {
         case RELAY_LBL:
         default:
             buf[1] = PCA9536_OUT_PORT_LBL;
@@ -350,6 +350,8 @@ bool Sensor_Read(sensor_name_t sensor, sensor_mode_t cap_mode) {
 
         /* We got the lock and can now work with the message exclusively
          * to update the outgoing message with the new values */
+        tx_message_raw.msg.sensor[sensor].single_ended_enabled = sensor_control[sensor].enable_c1_c2;
+        tx_message_raw.msg.sensor[sensor].relay_state = sensor_control[sensor].relay_position;
 
         /* What read mode resulted in this value? */
         switch(cap_mode) {
@@ -408,31 +410,29 @@ void Sensor_Process(sensor_name_t sensor) {
     bool result2 = false;
 
     /* Don't process disabled sensors */
-    if (sensor_control[sensor].disabled) {
+    if (!sensor_control[sensor].enabled) {
         tx_message_raw.msg.sensor[sensor].sensor_connected = false;
         tx_message_raw.msg.sensor[sensor].th_connected = false;
         return;
     }
 
     /* Get the values used to drive the state machine from the control structure */
-    sensor_state_t *p_state    = &(sensor_control[sensor].state);
-    sensor_mode_t *p_mode      = &(sensor_control[sensor].mode);
-    sensor_mode_t *p_next_mode = &(sensor_control[sensor].next_mode);
-    sensor_mode_t *p_last_mode = &(sensor_control[sensor].last_mode);
-    uint8_t *p_conversions     = &(sensor_control[sensor].conversions);
-    bool enable_c1_c2          =   sensor_control[sensor].enable_c1_c2;
-    bool *p_cap_connected      = &(sensor_control[sensor].ad7746_connected);
-    timer_t *p_timer_init      = &(sensor_control[sensor].timer_init);
-    timer_t *p_timer_ready     = &(sensor_control[sensor].timer_ready);
-    bool *p_th_connected       = &(sensor_control[sensor].si7020_connected);
-    timer_t *p_th_timer        = &(sensor_control[sensor].si7020_timer);
-    relay_position_t *relay    = &(sensor_control[sensor].relay_position);
-
-    /* For testing */
-    bool *p_toggle             = &(sensor_control[sensor].toggle);
+    sensor_state_t *p_state        = &(sensor_control[sensor].state);
+    sensor_mode_t *p_mode          = &(sensor_control[sensor].mode);
+    sensor_mode_t *p_next_mode     = &(sensor_control[sensor].next_mode);
+    sensor_mode_t *p_last_mode     = &(sensor_control[sensor].last_mode);
+    uint8_t *p_conversions         = &(sensor_control[sensor].conversions);
+    bool enable_c1_c2              =   sensor_control[sensor].enable_c1_c2;
+    bool *p_cap_connected          = &(sensor_control[sensor].ad7746_connected);
+    timer_t *p_timer_init          = &(sensor_control[sensor].timer_init);
+    timer_t *p_timer_ready         = &(sensor_control[sensor].timer_ready);
+    bool *p_th_connected           = &(sensor_control[sensor].si7020_connected);
+    timer_t *p_th_timer            = &(sensor_control[sensor].si7020_timer);
+    relay_position_t *p_relay      = &(sensor_control[sensor].relay_position);
+    relay_position_t *p_relay_prev = &(sensor_control[sensor].relay_position_previous);
 
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
-    bool *p_ready_flag         = sensor_io[sensor].isr_flag;
+    bool *p_ready_flag             = sensor_io[sensor].isr_flag;
 
     /* Update the outbound message fields */
     tx_message_raw.msg.sensor[sensor].sensor_connected = *p_cap_connected;
@@ -491,7 +491,13 @@ void Sensor_Process(sensor_name_t sensor) {
             }
 
             /* If the relay position demand has changed, set them */
-            //Relay_Set(sensor, PCA9536_OUT_PORT_LBL);
+            if (*p_relay != *p_relay_prev) {
+                Relay_Set(sensor, *p_relay);
+
+                /* Store the new position as previous so we don't end up sending
+                 * the commands to the relay over and over */
+                *p_relay_prev = *p_relay;
+            }
 
             break;
 
@@ -536,9 +542,6 @@ void Sensor_Process(sensor_name_t sensor) {
             if ((!result) || (!result2)) {
                 *p_cap_connected = false;
             }
-
-            /* Set the relays to the last known desired state */
-            Relay_Set(sensor, *relay);
 
             /* Always go back to idle so the timers can run */
             TO_STATE(STATE_IDLE);
@@ -719,7 +722,6 @@ static void Sensor_Task(void *pvParameters) {
     sensor_name_t sensor;
 
     int32_t heartbeatTimer;
-    bool toggle;
 
     /* Delay 10ms per execution of the loop */
     uint32_t task_delay = 10;
@@ -778,7 +780,7 @@ uint32_t Sensor_Task_Init(void) {
 
         /* Initialize the fields to sane defaults */
         sensor_control[sensor].state           = STATE_POR;
-        sensor_control[sensor].disabled        = false;
+        sensor_control[sensor].enabled         = false;
         sensor_control[sensor].relay_position  = RELAY_LBL;
         sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
         sensor_control[sensor].next_mode       = MODE_C_DIFFERENTIAL;
@@ -799,15 +801,9 @@ uint32_t Sensor_Task_Init(void) {
     }
 
 
-    /* Testing: disable some sensors */
-    sensor_control[SENSOR1].disabled = true;
-    sensor_control[SENSOR2].disabled = true;
-    sensor_control[SENSOR3].disabled = true;
-    sensor_control[SENSOR4].disabled = true;
-    sensor_control[SENSOR5].disabled = true;
-    //sensor_control[SENSOR6].disabled = true;
-
-    sensor_control[SENSOR6].enable_c1_c2 = true;
+    /* Testing: enabling some sensors */
+    //sensor_control[SENSOR6].enabled = true;
+    //sensor_control[SENSOR6].enable_c1_c2 = true;
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {

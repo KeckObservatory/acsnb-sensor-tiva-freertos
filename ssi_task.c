@@ -86,6 +86,56 @@ bool SSI_Load_Message(void) {
 
 
 /* -----------------------------------------------------------------------------
+ * Decodes the last message from the Beaglebone.
+ */
+void SSI_Decode_Message_In(void) {
+
+    uint8_t i;
+    uint8_t checksum;
+
+    /* Calculate the checksum of the inbound message */
+    for (i = 0, checksum = 0; i < SSI_MESSAGE_LENGTH; i++) {
+        checksum += rx_message.buf[i];
+    }
+
+    /* A valid checksum calculation results in 0x00 */
+    if (checksum == 0) {
+
+        /* Check the message key.  This will prevent an all 0's message from
+         * being parsed. */
+        if (rx_message.msg.key == RX_MESSAGE_KEY) {
+
+            /* Now all the fields can take effect! */
+
+            /* Sensor enables (boolean) */
+            sensor_control[SENSOR1].enabled = (bool) rx_message.msg.enable_sensor1;
+            sensor_control[SENSOR2].enabled = (bool) rx_message.msg.enable_sensor2;
+            sensor_control[SENSOR3].enabled = (bool) rx_message.msg.enable_sensor3;
+            sensor_control[SENSOR4].enabled = (bool) rx_message.msg.enable_sensor4;
+            sensor_control[SENSOR5].enabled = (bool) rx_message.msg.enable_sensor5;
+            sensor_control[SENSOR6].enabled = (bool) rx_message.msg.enable_sensor6;
+
+            /* Single ended sensing enables (boolean) */
+            sensor_control[SENSOR1].enable_c1_c2 = (bool) rx_message.msg.enable_single1;
+            sensor_control[SENSOR2].enable_c1_c2 = (bool) rx_message.msg.enable_single2;
+            sensor_control[SENSOR3].enable_c1_c2 = (bool) rx_message.msg.enable_single3;
+            sensor_control[SENSOR4].enable_c1_c2 = (bool) rx_message.msg.enable_single4;
+            sensor_control[SENSOR5].enable_c1_c2 = (bool) rx_message.msg.enable_single5;
+            sensor_control[SENSOR6].enable_c1_c2 = (bool) rx_message.msg.enable_single6;
+
+            /* Relay settings (relay_position_t; 0 = LBL, 1 = Kona) */
+            sensor_control[SENSOR1].relay_position = (relay_position_t) rx_message.msg.relay1;
+            sensor_control[SENSOR2].relay_position = (relay_position_t) rx_message.msg.relay2;
+            sensor_control[SENSOR3].relay_position = (relay_position_t) rx_message.msg.relay3;
+            sensor_control[SENSOR4].relay_position = (relay_position_t) rx_message.msg.relay4;
+            sensor_control[SENSOR5].relay_position = (relay_position_t) rx_message.msg.relay5;
+            sensor_control[SENSOR6].relay_position = (relay_position_t) rx_message.msg.relay6;
+        }
+    }
+}
+
+
+/* -----------------------------------------------------------------------------
  * SSI RTOS task main loop.  This task handles the SSI interface back to the
  * Beaglebone.
  *
@@ -122,6 +172,9 @@ static void SSI_Task(void *pvParameters) {
 
         /* Message has been received, prep the next one */
         if (rxtx_message_ready || refresh) {
+
+            /* Decode the inbound message */
+            SSI_Decode_Message_In();
 
             /* Load the next message */
             loaded = SSI_Load_Message();
