@@ -71,16 +71,18 @@ void GPIO_Setup_ISR(void) {
      * conversion on enabled channel(s) has been finished and the new data is available.
      * However, per node box schematic, the signal is inverted  - so use the rising edge!
      */
-    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_INT_PIN_3, GPIO_RISING_EDGE);
-    GPIOIntTypeSet(GPIO_PORTB_BASE, GPIO_INT_PIN_5, GPIO_RISING_EDGE);
-    GPIOIntTypeSet(GPIO_PORTC_BASE, GPIO_INT_PIN_4, GPIO_RISING_EDGE);
-    GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_INT_PIN_7, GPIO_RISING_EDGE);
-    GPIOIntTypeSet(GPIO_PORTE_BASE, GPIO_INT_PIN_0, GPIO_RISING_EDGE);
-    GPIOIntTypeSet(GPIO_PORTF_BASE, GPIO_INT_PIN_4, GPIO_RISING_EDGE);
+
+    /* All the ready lines are falling edge */
+    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_INT_PIN_7, GPIO_FALLING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTB_BASE, GPIO_INT_PIN_5, GPIO_FALLING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTC_BASE, GPIO_INT_PIN_4, GPIO_FALLING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_INT_PIN_7, GPIO_FALLING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTE_BASE, GPIO_INT_PIN_0, GPIO_FALLING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTF_BASE, GPIO_INT_PIN_4, GPIO_FALLING_EDGE);
 
     /* For SSI0, interrupt on the rising edge of the chip select, which is the signal that
      * the master has ended the transaction. */
-    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_INT_PIN_7, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_INT_PIN_3, GPIO_RISING_EDGE);
 
     /* Clear any interrupts before we enable the ISRs */
     GPIOIntClear(GPIO_PORTA_BASE, GPIO_INT_PIN_3 | GPIO_INT_PIN_7);

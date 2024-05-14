@@ -129,6 +129,7 @@ bool TH_Sensor_Init(sensor_name_t sensor) {
         } else {
             sensor_control[sensor].si7020_connected = false;
         }
+
     } else {
         sensor_control[sensor].si7020_connected = false;
         return false;
@@ -676,15 +677,6 @@ void Sensor_Process(sensor_name_t sensor) {
 
         /* Read the temperature + humidity */
         case STATE_READ_TH:
-
-#ifdef demo
-            if (*p_toggle) {
-                Relay_Set(sensor, RELAY_KONA);
-            } else {
-                Relay_Set(sensor, RELAY_LBL);
-            }
-            *p_toggle = !*p_toggle;
-#endif
 
             /* If a T+H sensor isn't connected, try to detect it and use it */
             if (!(*p_th_connected)) {
