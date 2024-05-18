@@ -210,8 +210,8 @@ int main(void) {
     g_txMessageSemaphore = xSemaphoreCreateMutex();
 
     /* Initialize the UART and configure it for 115,200, 8-N-1 operation */
-    ConfigureUART();
-    v_printf("\n\nACS Node Box sensor module started.\n");
+    //ConfigureUART();
+    //v_printf("\n\nACS Node Box sensor module started.\n");
 
     // TBD - this code never sleeps so this call is moot
     //SysCtlPeripheralClockGating(true);

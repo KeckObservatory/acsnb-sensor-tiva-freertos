@@ -128,6 +128,7 @@ bool TH_Sensor_Init(sensor_name_t sensor) {
             sensor_control[sensor].si7020_connected = true;
         } else {
             sensor_control[sensor].si7020_connected = false;
+            return false;
         }
 
     } else {
@@ -191,6 +192,10 @@ bool TH_Sensor_Read(sensor_name_t sensor) {
             tx_message_raw.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
             tx_message_raw.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
             tx_message_raw.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
+
+            /* Sensor is now disconnected */
+            sensor_control[sensor].si7020_connected = false;
+
 
             /* Release the semaphore */
             xSemaphoreGive(g_txMessageSemaphore);
