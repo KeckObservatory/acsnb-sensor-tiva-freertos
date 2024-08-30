@@ -23,6 +23,7 @@
 /* -----------------------------------------------------------------------------
  * Function prototypes
  */
+EXTERN void GPIO_Setup_Periph(void);
 EXTERN void GPIO_Setup_ISR(void);
 EXTERN void GPIO_PortA_Int_Handler(void);
 EXTERN void GPIO_PortB_Int_Handler(void);

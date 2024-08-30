@@ -40,15 +40,15 @@ void ConfigureUART(void) {
 #ifdef VIRTUAL_UART_SUPPORT
 
     // Enable the GPIO Peripheral used by the UART.
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
 
     // Enable UART01
-    ROM_SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
+    SysCtlPeripheralEnable(SYSCTL_PERIPH_UART0);
 
     // Configure GPIO Pins for UART mode.
-    ROM_GPIOPinConfigure(GPIO_PA0_U0RX);
-    ROM_GPIOPinConfigure(GPIO_PA1_U0TX);
-    ROM_GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
+    GPIOPinConfigure(GPIO_PA0_U0RX);
+    GPIOPinConfigure(GPIO_PA1_U0TX);
+    GPIOPinTypeUART(GPIO_PORTA_BASE, GPIO_PIN_0 | GPIO_PIN_1);
 
     // Use the internal 16MHz oscillator as the UART clock source.
     UARTClockSourceSet(UART0_BASE, UART_CLOCK_PIOSC);
@@ -70,7 +70,7 @@ void v_printf(const char *pcString, ...) {
     va_list vaArgP;
 
     /* Take the semaphore but do not wait forever */
-    xSemaphoreTake(g_pUARTSemaphore, portMAX_DELAY);
+//    xSemaphoreTake(g_pUARTSemaphore, portMAX_DELAY);
 
     /* Start the varargs processing */
     va_start(vaArgP, pcString);
@@ -81,7 +81,7 @@ void v_printf(const char *pcString, ...) {
     va_end(vaArgP);
 
     /* Release the semaphore */
-    xSemaphoreGive(g_pUARTSemaphore);
+//    xSemaphoreGive(g_pUARTSemaphore);
 #endif
 }
 
@@ -238,8 +238,8 @@ int main(void) {
     }
 #endif
 
-    /* Setup the interrupt service routines for the GPIO lines */
-    GPIO_Setup_ISR();
+    /* Start the GPIO peripherals */
+    GPIO_Setup_Periph();
 
     /* Create the sensor task */
     if (Sensor_Task_Init() != 0) {
@@ -250,6 +250,9 @@ int main(void) {
     if (SSI_Task_Init() != 0) {
         while (1) {}
     }
+
+    /* Start/enable the interrupt service routines for the GPIO lines */
+    GPIO_Setup_ISR();
 
 
 #ifdef ZERO

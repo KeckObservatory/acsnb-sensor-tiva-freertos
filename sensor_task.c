@@ -799,8 +799,8 @@ uint32_t Sensor_Task_Init(void) {
 
 
     /* Testing: enabling some sensors */
-    //sensor_control[SENSOR6].enabled = true;
-    //sensor_control[SENSOR6].enable_c1_c2 = true;
+    //sensor_control[SENSOR1].enabled = true;
+    //sensor_control[SENSOR1].enable_c1_c2 = true;
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {

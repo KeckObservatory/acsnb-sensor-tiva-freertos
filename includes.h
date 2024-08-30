@@ -12,7 +12,7 @@
 #define INCLUDES_H_
 
 // Feature switches
-#undef VIRTUAL_UART_SUPPORT   // define this to 1 if supported
+#define VIRTUAL_UART_SUPPORT 0 // define this to 1 if supported
 
 // Firmware revision as of 2024-02-23 (PMR)
 #define FIRMWARE_REV_0 1

@@ -23,9 +23,9 @@
 #include "includes.h"
 
 /* -----------------------------------------------------------------------------
- * Connect the individual GPIO lines to their ISRs.
+ * Setup the GPIO peripherals (but not the interrupts yet)
  */
-void GPIO_Setup_ISR(void) {
+void GPIO_Setup_Periph(void) {
 
     /* Init all the GPIO peripherals */
     SysCtlPeripheralEnable(SYSCTL_PERIPH_GPIOA);
@@ -58,6 +58,12 @@ void GPIO_Setup_ISR(void) {
     GPIOPinTypeGPIOInput(GPIO_PORTD_BASE, GPIO_INT_PIN_7);
     GPIOPinTypeGPIOInput(GPIO_PORTE_BASE, GPIO_INT_PIN_0);
     GPIOPinTypeGPIOInput(GPIO_PORTF_BASE, GPIO_INT_PIN_4);
+}
+
+/* -----------------------------------------------------------------------------
+ * Connect the individual GPIO lines to their ISRs.
+ */
+void GPIO_Setup_ISR(void) {
 
     /* Tie the interrupt handlers */
     GPIOIntRegister(GPIO_PORTA_BASE, GPIO_PortA_Int_Handler);
@@ -71,14 +77,23 @@ void GPIO_Setup_ISR(void) {
      * conversion on enabled channel(s) has been finished and the new data is available.
      * However, per node box schematic, the signal is inverted  - so use the rising edge!
      */
+    GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_INT_PIN_7, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTB_BASE, GPIO_INT_PIN_5, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTC_BASE, GPIO_INT_PIN_4, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_INT_PIN_7, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTE_BASE, GPIO_INT_PIN_0, GPIO_RISING_EDGE);
+    GPIOIntTypeSet(GPIO_PORTF_BASE, GPIO_INT_PIN_4, GPIO_RISING_EDGE);
 
-    /* All the ready lines are falling edge */
+    // this commented block is for debugging purposes only
+    /*
     GPIOIntTypeSet(GPIO_PORTA_BASE, GPIO_INT_PIN_7, GPIO_FALLING_EDGE);
     GPIOIntTypeSet(GPIO_PORTB_BASE, GPIO_INT_PIN_5, GPIO_FALLING_EDGE);
     GPIOIntTypeSet(GPIO_PORTC_BASE, GPIO_INT_PIN_4, GPIO_FALLING_EDGE);
     GPIOIntTypeSet(GPIO_PORTD_BASE, GPIO_INT_PIN_7, GPIO_FALLING_EDGE);
     GPIOIntTypeSet(GPIO_PORTE_BASE, GPIO_INT_PIN_0, GPIO_FALLING_EDGE);
     GPIOIntTypeSet(GPIO_PORTF_BASE, GPIO_INT_PIN_4, GPIO_FALLING_EDGE);
+    */
+
 
     /* For SSI0, interrupt on the rising edge of the chip select, which is the signal that
      * the master has ended the transaction. */
