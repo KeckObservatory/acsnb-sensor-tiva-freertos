@@ -239,6 +239,23 @@ typedef enum {
 } sensor_conversion_time_t;
 
 /* -----------------------------------------------------------------------------
+ * Identity device / serial number defines
+ */
+#define SERIAL_NUMBER_SIZE 6
+#ifdef SENSOR_TASK_C_
+    const char serial_number_default[SERIAL_NUMBER_SIZE] = {0, 0, 0, 0, 0, 0, 0};
+    const char serial_number_invalid[SERIAL_NUMBER_SIZE] = {0x1D, 0xDE, 0xAD, 0, 0, 0, 0};
+#else
+    extern const char serial_number_default[SERIAL_NUMBER_SIZE];
+    extern const char serial_number_invalid[SERIAL_NUMBER_SIZE];
+#endif
+
+#define UC24AA02UID_OP_WRITE    0x50
+#define UC24AA02UID_OP_READ     0x51
+#define UC24AA02UID_SN_BASE     0xFA
+
+
+/* -----------------------------------------------------------------------------
  * This structure contains the sensor state and latest values of the capacitance,
  * temperature, humidity, and chip temperature. *
  */
@@ -286,7 +303,8 @@ typedef struct {
     uint8_t                   si7020_esn[8];
     timer_t                   si7020_timer;
 
-    bool                      toggle;
+    /* 24AA02UID serial EEPROM support with 6 bytes of a device serial number */
+    uint8_t                   serial_number[SERIAL_NUMBER_SIZE];
 
 } sensor_control_t;
 

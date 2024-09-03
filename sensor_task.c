@@ -80,6 +80,37 @@ bool Relay_Set(sensor_name_t sensor, relay_position_t position) {
 
 
 /* -----------------------------------------------------------------------------
+ * Read the 24AA02UID identity device serial number
+ */
+bool Identity_Read(sensor) {
+
+    int8_t result;
+    uint8_t buf[SERIAL_NUMBER_SIZE] = {0, 0, 0, 0, 0, 0};
+    uint32_t base = sensor_io[sensor].periph_base;
+
+    /* First part of ESN at 0xFA0F */
+    buf[0] = UC24AA02UID_SN_BASE;
+    result = I2C_Send(base, UC24AA02UID_OP_WRITE, buf, 1);
+    if (result < 0) return false;
+
+    /* Read 6 bytes */
+    result = I2C_Receive(base, UC24AA02UID_OP_READ, buf, SERIAL_NUMBER_SIZE);
+    if (result < 0) {
+
+        /* Copy a bogus result into the serial number storage */
+        memcpy(sensor_control[sensor].serial_number, serial_number_invalid, SERIAL_NUMBER_SIZE);
+        memcpy(tx_message_raw.msg.sensor[sensor].serial_number, serial_number_invalid, SERIAL_NUMBER_SIZE);
+        return false;
+    } else {
+
+        /* Copy the good result into the serial number storage */
+        memcpy(sensor_control[sensor].serial_number, buf, SERIAL_NUMBER_SIZE);
+        memcpy(tx_message_raw.msg.sensor[sensor].serial_number, buf, SERIAL_NUMBER_SIZE);
+    }
+}
+
+
+/* -----------------------------------------------------------------------------
  * Initialize the Si7020 temperature+humidity sensor.
  */
 bool TH_Sensor_Init(sensor_name_t sensor) {
@@ -538,11 +569,14 @@ void Sensor_Process(sensor_name_t sensor) {
         /* Initialize the I2C devices (cap sensor, cap relays) */
         case STATE_INIT:
 
+            /* Read the identity device */
+            Identity_Read(sensor);
+
             /* Try to init the sensor */
             result = Sensor_Init(sensor);
 
             /* Attempt to init the switching relay */
-            result2 = Relay_Init(sensor);
+            result2 = 1; //Relay_Init(sensor);
 
             /* If either fail, mark the sensor as disconnected before returning to idle  */
             if ((!result) || (!result2)) {
@@ -776,15 +810,15 @@ uint32_t Sensor_Task_Init(void) {
     for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
 
         /* Initialize the fields to sane defaults */
-        sensor_control[sensor].state           = STATE_POR;
-        sensor_control[sensor].enabled         = false;
-        sensor_control[sensor].relay_position  = RELAY_LBL;
-        sensor_control[sensor].mode            = MODE_C_DIFFERENTIAL;
-        sensor_control[sensor].next_mode       = MODE_C_DIFFERENTIAL;
-        sensor_control[sensor].last_mode       = MODE_C_DIFFERENTIAL;
-        sensor_control[sensor].conversion_time = CONVERT_TIME_109MS;
-        sensor_control[sensor].enable_c1_c2    = false;
-        sensor_control[sensor].toggle          = false;
+        sensor_control[sensor].state                    = STATE_POR;
+        sensor_control[sensor].enabled                  = false;
+        sensor_control[sensor].relay_position           = RELAY_LBL;
+        sensor_control[sensor].mode                     = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].next_mode                = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].last_mode                = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].conversion_time          = CONVERT_TIME_109MS;
+        sensor_control[sensor].enable_c1_c2             = false;
+        memcpy(sensor_control[sensor].serial_number, serial_number_default, SERIAL_NUMBER_SIZE);
 
         /* Initialize the I2C bus for the sensor */
         I2C_Init(sensor);
@@ -795,6 +829,7 @@ uint32_t Sensor_Task_Init(void) {
         tx_message_raw.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
         tx_message_raw.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
         tx_message_raw.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
+        memcpy(tx_message_raw.msg.sensor[sensor].serial_number, serial_number_default, SERIAL_NUMBER_SIZE);
     }
 
 

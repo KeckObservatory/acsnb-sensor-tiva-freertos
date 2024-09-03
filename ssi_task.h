@@ -92,11 +92,14 @@ typedef struct {
         uint8_t chip_temp_mid;
         uint8_t chip_temp_low;
 
+        /* [20-25] Identity module serial number */
+        uint8_t serial_number[SERIAL_NUMBER_SIZE];
+
     } sensor[MAX_SENSORS];
 
 } __attribute__((packed)) tx_message_t;
 
-/* Message is 5+4+(6*18) = 117 bytes long */
+/* Message is 5+4+(6*28) = 165 bytes long */
 #define SSI_MESSAGE_LENGTH sizeof(tx_message_t)
 
 /* Wrap the message with an array of bytes.  Make 3 copies of this:

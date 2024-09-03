@@ -130,6 +130,10 @@ void SSI_Decode_Message_In(void) {
             sensor_control[SENSOR4].relay_position = (relay_position_t) rx_message.msg.relay4;
             sensor_control[SENSOR5].relay_position = (relay_position_t) rx_message.msg.relay5;
             sensor_control[SENSOR6].relay_position = (relay_position_t) rx_message.msg.relay6;
+
+            /* Setting of the capacitance test set relay positions */
+            //TBD
+
         }
     }
 }
