@@ -243,8 +243,8 @@ typedef enum {
  */
 #define SERIAL_NUMBER_SIZE 6
 #ifdef SENSOR_TASK_C_
-    const char serial_number_default[SERIAL_NUMBER_SIZE] = {0, 0, 0, 0, 0, 0, 0};
-    const char serial_number_invalid[SERIAL_NUMBER_SIZE] = {0x1D, 0xDE, 0xAD, 0, 0, 0, 0};
+    const char serial_number_default[SERIAL_NUMBER_SIZE] = {0, 0, 0, 0, 0, 0};
+    const char serial_number_invalid[SERIAL_NUMBER_SIZE] = {0x1D, 0xDE, 0xAD, 0, 0, 0};
 #else
     extern const char serial_number_default[SERIAL_NUMBER_SIZE];
     extern const char serial_number_invalid[SERIAL_NUMBER_SIZE];
@@ -253,6 +253,73 @@ typedef enum {
 #define UC24AA02UID_OP_WRITE    0x50
 #define UC24AA02UID_OP_READ     0x51
 #define UC24AA02UID_SN_BASE     0xFA
+
+/* -----------------------------------------------------------------------------
+ * Maxim MAX7310 port expander device - for use only with the capacitance sensor
+ * test set.
+ */
+#define MAX7310_ADDR_WRITE      0x18 //0x30
+#define MAX7310_ADDR_READ       0x19 //0x31
+#define MAX7310_INPUT_REG       0x00
+#define MAX7310_OUTPUT_REG      0x01
+#define MAX7310_CFG_REG         0x03
+#define MAX7310_CFG_SET_OUTPUTS 0
+#define MAX7310_TIMEOUT_REG     0x04
+#define MAX7310_TIMEOUT_DISABLE 0
+#define MAX7310_HOLD_TIME       4    // ms
+
+/* A set of bit masks for the various outputs.
+ *
+ * On the drawing, the relays are setup to connect pins on one side (pins 3 and 6)
+ * to a selected set of pins on the other side (either 7 and 2, or 5 and 4).  We will
+ * refer to these modes as "6-7 and 3-2 mode" versus "6-5 and 3-4 mode" which are
+ * two distinct settings of the relays that are selected by writing a 1 to IO pin 8
+ * and a 0 to IO pin 1.  To achieve the other selection, write a 0 to IO8 and a 1 to
+ * IO1.  Hold this for 4ms to let the relay switch.
+ *
+ * U4A and B control the sense side of the AD7746. Pin mode 6-7/3-2 enables the sense
+ * side connection.
+ *
+ * U5A and B control the excitation side of the AD7746. Pin mode 6-5/3-4 enables the
+ * excitation.  (Yes, it's backwards compared to the other side.)
+ *
+ * U8A and B control the capacitors that are connected to the differential
+ * inputs.  When in the pin 6-7 and 3-2 mode, the C8 (fixed) and C9 (variable)
+ * caps are connected.   When in the pin 6-5 and 3-4 mode, the C10 (fixed) and
+ * C11 (fixed) are connected.
+ *
+ * For this to make more sense, look at the NB_Testset.pdf drawing sheet 3.
+ */
+
+#define CAP_RELAY_RESET         0b00000000
+
+/* Define the connections between the relay pins and the MAX7310 IO lines.
+ * IOs 0 and 1 are not used. */
+#define CAP_RELAY_U4_PIN1       0b01000000 // IO6
+#define CAP_RELAY_U4_PIN8       0b10000000 // IO7
+#define CAP_RELAY_U5_PIN1       0b00000010 // IO2
+#define CAP_RELAY_U5_PIN8       0b00000100 // IO3
+#define CAP_RELAY_U8_PIN1       0b00001000 // IO4
+#define CAP_RELAY_U8_PIN8       0b00010000 // IO5
+
+/* Assert the PIN8 value to connect 6-7 and 3-2
+ * Assert the PIN1 value to connect 6-5 and 3-4 */
+#define CAP_RELAY_U4_67_32      CAP_RELAY_U4_PIN8
+#define CAP_RELAY_U4_65_34      CAP_RELAY_U4_PIN1
+
+#define CAP_RELAY_U5_67_32      CAP_RELAY_U5_PIN8
+#define CAP_RELAY_U5_65_34      CAP_RELAY_U5_PIN1
+
+#define CAP_RELAY_U8_67_32      CAP_RELAY_U8_PIN8
+#define CAP_RELAY_U8_65_34      CAP_RELAY_U8_PIN1
+
+/* Relay selection choices */
+typedef enum {
+    CAP_RELAY_SET_UNKNOWN       = 0,
+    CAP_RELAY_SET_67_32         = 1,
+    CAP_RELAY_SET_65_34         = 2
+} cap_relay_position_t;
+
 
 
 /* -----------------------------------------------------------------------------
@@ -278,9 +345,8 @@ typedef struct {
     timer_t                   timer_init;
     timer_t                   timer_ready;
 
-    /* Sensor switching */
-    relay_position_t          relay_position;
-    relay_position_t          relay_position_previous;
+    /* LBL-Kona Sensor switching */
+    relay_position_t          relay_position, relay_position_previous;
 
     /* Capacitor/temperature selection mode */
     sensor_mode_t             mode;
@@ -305,6 +371,13 @@ typedef struct {
 
     /* 24AA02UID serial EEPROM support with 6 bytes of a device serial number */
     uint8_t                   serial_number[SERIAL_NUMBER_SIZE];
+
+    /* Capacitance test set relay positions */
+    bool                      max7310_connected;
+    bool                      max7310_configured;
+    cap_relay_position_t      relay_u4_position, relay_u4_position_previous;
+    cap_relay_position_t      relay_u5_position, relay_u5_position_previous;
+    cap_relay_position_t      relay_u8_position, relay_u8_position_previous;
 
 } sensor_control_t;
 

@@ -150,6 +150,14 @@ typedef struct {
     uint8_t relay5;
     uint8_t relay6;
 
+    /* Capacitance test set relay settings */
+    uint8_t relay_set1[3];
+    uint8_t relay_set2[3];
+    uint8_t relay_set3[3];
+    uint8_t relay_set4[3];
+    uint8_t relay_set5[3];
+    uint8_t relay_set6[3];
+
 } __attribute__((packed)) rx_message_t;
 
 /* Wrap the message with an array of bytes sized to equate to the transmit message,

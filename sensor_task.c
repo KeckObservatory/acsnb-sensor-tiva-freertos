@@ -80,6 +80,105 @@ bool Relay_Set(sensor_name_t sensor, relay_position_t position) {
 
 
 /* -----------------------------------------------------------------------------
+ * Update the positions of the capacitance test set relays.  This is done using
+ * a pulse for 4ms on a given line of the MAX7310 device.
+ */
+bool Cap_Testset_Relays_Set(sensor) {
+
+    int8_t result;
+    uint8_t outputs = 0;
+    uint8_t buf[2] = {0, 0};
+    uint32_t base = sensor_io[sensor].periph_base;
+
+
+    /* If the device needs initialization, do that now */
+    if (!sensor_control[sensor].max7310_configured) {
+
+#ifdef TBD
+        /* Disable the timeout feature */
+        buf[0] = MAX7310_TIMEOUT_REG;
+        buf[1] = MAX7310_TIMEOUT_DISABLE;
+
+        result = I2C_Send(base, MAX7310_ADDR_WRITE, buf, 2);
+        if (result < 0) return false;
+#endif
+
+        /* Set the output configuration via the output register */
+        buf[0] = MAX7310_CFG_REG;
+        buf[1] = MAX7310_CFG_SET_OUTPUTS;
+
+        result = I2C_Send(base, MAX7310_ADDR_WRITE, buf, 2);
+        if (result < 0) return false;
+
+        sensor_control[sensor].max7310_configured = true;
+    }
+
+    /* Set the output states via the output register */
+    buf[0] = MAX7310_OUTPUT_REG;
+
+    /* Check U4 first. If U5 and U8 need switching, we will do that the next time this function
+     * is called. */
+    if (sensor_control[sensor].relay_u4_position != sensor_control[sensor].relay_u4_position_previous) {
+        switch (sensor_control[sensor].relay_u4_position) {
+            case CAP_RELAY_SET_67_32:
+                outputs = CAP_RELAY_U4_67_32;
+                break;
+            case CAP_RELAY_SET_65_34:
+                outputs = CAP_RELAY_U4_65_34;
+                break;
+        }
+        /* Cache the previous value */
+        sensor_control[sensor].relay_u4_position_previous = sensor_control[sensor].relay_u4_position;
+
+    } else if (sensor_control[sensor].relay_u5_position != sensor_control[sensor].relay_u5_position_previous) {
+        switch (sensor_control[sensor].relay_u5_position) {
+            case CAP_RELAY_SET_67_32:
+                outputs = CAP_RELAY_U5_67_32;
+                break;
+            case CAP_RELAY_SET_65_34:
+                outputs = CAP_RELAY_U5_65_34;
+                break;
+        }
+        /* Cache the previous value */
+        sensor_control[sensor].relay_u5_position_previous = sensor_control[sensor].relay_u5_position;
+
+    } else if (sensor_control[sensor].relay_u8_position != sensor_control[sensor].relay_u8_position_previous) {
+        switch (sensor_control[sensor].relay_u8_position) {
+            case CAP_RELAY_SET_67_32:
+                outputs = CAP_RELAY_U8_67_32;
+                break;
+            case CAP_RELAY_SET_65_34:
+                outputs = CAP_RELAY_U8_65_34;
+                break;
+        }
+        /* Cache the previous value */
+        sensor_control[sensor].relay_u8_position_previous = sensor_control[sensor].relay_u8_position;
+    }
+
+
+    /* If there is an output change, send it */
+    if (outputs != 0) {
+
+        /* Send the command */
+        buf[1] = outputs;
+        result = I2C_Send(base, MAX7310_ADDR_WRITE, buf, 2);
+        if (result < 0) return false;
+
+        /* Hold the relay state for 4ms before resetting the driver */
+        vTaskDelay(MAX7310_HOLD_TIME);
+
+        buf[1] = CAP_RELAY_RESET;
+        result = I2C_Send(base, MAX7310_ADDR_WRITE, buf, 2);
+        if (result < 0) return false;
+    }
+
+    /* If we got this far, everything went as expected */
+    return true;
+
+
+}
+
+/* -----------------------------------------------------------------------------
  * Read the 24AA02UID identity device serial number
  */
 bool Identity_Read(sensor) {
@@ -106,6 +205,7 @@ bool Identity_Read(sensor) {
         /* Copy the good result into the serial number storage */
         memcpy(sensor_control[sensor].serial_number, buf, SERIAL_NUMBER_SIZE);
         memcpy(tx_message_raw.msg.sensor[sensor].serial_number, buf, SERIAL_NUMBER_SIZE);
+        return true;
     }
 }
 
@@ -154,8 +254,8 @@ bool TH_Sensor_Init(sensor_name_t sensor) {
         sensor_control[sensor].si7020_esn[6] = buf2[SI7020_SNB_2];
         sensor_control[sensor].si7020_esn[7] = buf2[SI7020_SNB_3];
 
-        /* Detect if it's an Si2070 */
-        if (buf2[SI7020_SNB_3] == SI7020_ID) {
+        /* Detect if it's an Si7020 or an Si7021, either is OK */
+        if ((buf2[SI7020_SNB_3] == SI7020_ID) || (buf2[SI7020_SNB_3] == SI7021_ID)) {
             sensor_control[sensor].si7020_connected = true;
         } else {
             sensor_control[sensor].si7020_connected = false;
@@ -444,7 +544,6 @@ void Sensor_Process(sensor_name_t sensor) {
 #define TO_STATE(s) (*p_state = s)
 
     bool result = false;
-    bool result2 = false;
 
     /* Don't process disabled sensors */
     if (!sensor_control[sensor].enabled) {
@@ -454,19 +553,28 @@ void Sensor_Process(sensor_name_t sensor) {
     }
 
     /* Get the values used to drive the state machine from the control structure */
-    sensor_state_t *p_state        = &(sensor_control[sensor].state);
-    sensor_mode_t *p_mode          = &(sensor_control[sensor].mode);
-    sensor_mode_t *p_next_mode     = &(sensor_control[sensor].next_mode);
-    sensor_mode_t *p_last_mode     = &(sensor_control[sensor].last_mode);
-    uint8_t *p_conversions         = &(sensor_control[sensor].conversions);
-    bool enable_c1_c2              =   sensor_control[sensor].enable_c1_c2;
-    bool *p_cap_connected          = &(sensor_control[sensor].ad7746_connected);
-    timer_t *p_timer_init          = &(sensor_control[sensor].timer_init);
-    timer_t *p_timer_ready         = &(sensor_control[sensor].timer_ready);
-    bool *p_th_connected           = &(sensor_control[sensor].si7020_connected);
-    timer_t *p_th_timer            = &(sensor_control[sensor].si7020_timer);
-    relay_position_t *p_relay      = &(sensor_control[sensor].relay_position);
-    relay_position_t *p_relay_prev = &(sensor_control[sensor].relay_position_previous);
+    sensor_state_t *p_state               = &(sensor_control[sensor].state);
+    sensor_mode_t *p_mode                 = &(sensor_control[sensor].mode);
+    sensor_mode_t *p_next_mode            = &(sensor_control[sensor].next_mode);
+    sensor_mode_t *p_last_mode            = &(sensor_control[sensor].last_mode);
+    uint8_t *p_conversions                = &(sensor_control[sensor].conversions);
+    bool enable_c1_c2                     =   sensor_control[sensor].enable_c1_c2;
+    bool *p_cap_connected                 = &(sensor_control[sensor].ad7746_connected);
+    timer_t *p_timer_init                 = &(sensor_control[sensor].timer_init);
+    timer_t *p_timer_ready                = &(sensor_control[sensor].timer_ready);
+    bool *p_th_connected                  = &(sensor_control[sensor].si7020_connected);
+    timer_t *p_th_timer                   = &(sensor_control[sensor].si7020_timer);
+    relay_position_t *p_relay             = &(sensor_control[sensor].relay_position);
+    relay_position_t *p_relay_prev        = &(sensor_control[sensor].relay_position_previous);
+
+    /* Support for the capacitance test set */
+    bool *p_max7310_connected             = &(sensor_control[sensor].max7310_connected);
+    cap_relay_position_t *p_u4_relay      = &(sensor_control[sensor].relay_u4_position);
+    cap_relay_position_t *p_u4_relay_prev = &(sensor_control[sensor].relay_u4_position_previous);
+    cap_relay_position_t *p_u5_relay      = &(sensor_control[sensor].relay_u5_position);
+    cap_relay_position_t *p_u5_relay_prev = &(sensor_control[sensor].relay_u5_position_previous);
+    cap_relay_position_t *p_u8_relay      = &(sensor_control[sensor].relay_u8_position);
+    cap_relay_position_t *p_u8_relay_prev = &(sensor_control[sensor].relay_u8_position_previous);
 
     /* Reference the ready flag for this sensor; note that this is a pointer already in the struct! */
     bool *p_ready_flag             = sensor_io[sensor].isr_flag;
@@ -504,8 +612,30 @@ void Sensor_Process(sensor_name_t sensor) {
         /* Check timers and run subsystems */
         case STATE_IDLE:
 
-            /* If the sensor is connected, get the capacitance */
+            /* If the sensor is connected we can talk on the bus to get cap or do relays */
             if (*p_cap_connected) {
+
+                /* If this is a normal sensor, it will have the PCA9536 relay device.  Else it is
+                 * connected to a capacitance sensor test set which uses a MAX7310 */
+                if (*p_max7310_connected) {
+                    if ((*p_u4_relay != *p_u4_relay_prev) ||
+                        (*p_u5_relay != *p_u5_relay_prev) ||
+                        (*p_u8_relay != *p_u8_relay_prev)) {
+
+                        /* Relay position demands have changed, update them */
+                        Cap_Testset_Relays_Set(sensor);
+                    }
+
+                } else {
+                    /* If the PCA9536 relay position demand has changed, set them */
+                    if (*p_relay != *p_relay_prev) {
+                        Relay_Set(sensor, *p_relay);
+
+                        /* Store the new position as previous so we don't end up sending
+                         * the commands to the relay over and over */
+                        *p_relay_prev = *p_relay;
+                    }
+                }
 
                 /* Interleave cap conversions with on-chip temperature converts */
                 if (*p_conversions < AD7746_TEMP_TRIGGER_RATE) {
@@ -525,15 +655,6 @@ void Sensor_Process(sensor_name_t sensor) {
             /* Else, try to reset+init the sensor periodically */
             } else if (timer_expired(p_timer_init)) {
                 TO_STATE(STATE_RESET);
-            }
-
-            /* If the relay position demand has changed, set them */
-            if (*p_relay != *p_relay_prev) {
-                Relay_Set(sensor, *p_relay);
-
-                /* Store the new position as previous so we don't end up sending
-                 * the commands to the relay over and over */
-                *p_relay_prev = *p_relay;
             }
 
             break;
@@ -573,15 +694,21 @@ void Sensor_Process(sensor_name_t sensor) {
             Identity_Read(sensor);
 
             /* Try to init the sensor */
-            result = Sensor_Init(sensor);
-
-            /* Attempt to init the switching relay */
-            result2 = 1; //Relay_Init(sensor);
-
-            /* If either fail, mark the sensor as disconnected before returning to idle  */
-            if ((!result) || (!result2)) {
+            if (!Sensor_Init(sensor)) {
+                /* Failed, mark the sensor as disconnected before returning to idle  */
                 *p_cap_connected = false;
             }
+
+#ifdef ZERO
+            /* Attempt to init the switching relay.  If that fails, assume the capacitance
+             * test set is connected and try using that instead. */
+            if (!Relay_Init(sensor)) {
+                *p_max7310_connected = true;
+            } else {
+                *p_max7310_connected = false;
+            }
+#endif
+            *p_max7310_connected = true;
 
             /* Always go back to idle so the timers can run */
             TO_STATE(STATE_IDLE);
@@ -810,32 +937,44 @@ uint32_t Sensor_Task_Init(void) {
     for (sensor = SENSOR1; sensor < MAX_SENSORS; sensor++) {
 
         /* Initialize the fields to sane defaults */
-        sensor_control[sensor].state                    = STATE_POR;
-        sensor_control[sensor].enabled                  = false;
-        sensor_control[sensor].relay_position           = RELAY_LBL;
-        sensor_control[sensor].mode                     = MODE_C_DIFFERENTIAL;
-        sensor_control[sensor].next_mode                = MODE_C_DIFFERENTIAL;
-        sensor_control[sensor].last_mode                = MODE_C_DIFFERENTIAL;
-        sensor_control[sensor].conversion_time          = CONVERT_TIME_109MS;
-        sensor_control[sensor].enable_c1_c2             = false;
+        sensor_control[sensor].state                      = STATE_POR;
+        sensor_control[sensor].enabled                    = false;
+        sensor_control[sensor].relay_position             = RELAY_LBL;
+        sensor_control[sensor].mode                       = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].next_mode                  = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].last_mode                  = MODE_C_DIFFERENTIAL;
+        sensor_control[sensor].conversion_time            = CONVERT_TIME_109MS;
+        sensor_control[sensor].enable_c1_c2               = false;
         memcpy(sensor_control[sensor].serial_number, serial_number_default, SERIAL_NUMBER_SIZE);
+
+        /* Defaults for the capacitance test set, initial state is not knowable because the
+         * relays will hold their position (through a power cycle!) until commanded to change,
+         * so start off in the "connected" state for everything. */
+        sensor_control[sensor].max7310_connected          = false;
+        sensor_control[sensor].max7310_configured         = false;
+        sensor_control[sensor].relay_u4_position          = CAP_RELAY_SET_UNKNOWN;
+        sensor_control[sensor].relay_u4_position_previous = CAP_RELAY_SET_UNKNOWN;
+        sensor_control[sensor].relay_u5_position          = CAP_RELAY_SET_UNKNOWN;
+        sensor_control[sensor].relay_u5_position_previous = CAP_RELAY_SET_UNKNOWN;
+        sensor_control[sensor].relay_u8_position          = CAP_RELAY_SET_UNKNOWN;
+        sensor_control[sensor].relay_u8_position_previous = CAP_RELAY_SET_UNKNOWN;
 
         /* Initialize the I2C bus for the sensor */
         I2C_Init(sensor);
 
         /* Set sane defaults in the messaging for the values, no need to
          * try to lock the message here as it will not be used yet */
-        tx_message_raw.msg.sensor[sensor].temp_high     = SI7020_INVALID_TH;
-        tx_message_raw.msg.sensor[sensor].temp_low      = SI7020_INVALID_TL;
-        tx_message_raw.msg.sensor[sensor].humidity_high = SI7020_INVALID_HH;
-        tx_message_raw.msg.sensor[sensor].humidity_low  = SI7020_INVALID_HL;
+        tx_message_raw.msg.sensor[sensor].temp_high       = SI7020_INVALID_TH;
+        tx_message_raw.msg.sensor[sensor].temp_low        = SI7020_INVALID_TL;
+        tx_message_raw.msg.sensor[sensor].humidity_high   = SI7020_INVALID_HH;
+        tx_message_raw.msg.sensor[sensor].humidity_low    = SI7020_INVALID_HL;
         memcpy(tx_message_raw.msg.sensor[sensor].serial_number, serial_number_default, SERIAL_NUMBER_SIZE);
     }
 
 
     /* Testing: enabling some sensors */
-    //sensor_control[SENSOR1].enabled = true;
-    //sensor_control[SENSOR1].enable_c1_c2 = true;
+    sensor_control[SENSOR1].enabled = true;
+    sensor_control[SENSOR1].enable_c1_c2 = true;
 
     if(xTaskCreate(Sensor_Task, (const portCHAR *)"SENSOR", SENSOR_TASK_STACK_SIZE, NULL,
                    tskIDLE_PRIORITY + PRIORITY_SENSOR_TASK, NULL) != pdTRUE) {

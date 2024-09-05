@@ -132,8 +132,29 @@ void SSI_Decode_Message_In(void) {
             sensor_control[SENSOR6].relay_position = (relay_position_t) rx_message.msg.relay6;
 
             /* Setting of the capacitance test set relay positions */
-            //TBD
+            sensor_control[SENSOR1].relay_u4_position = (cap_relay_position_t) rx_message.msg.relay_set1[0];
+            sensor_control[SENSOR1].relay_u5_position = (cap_relay_position_t) rx_message.msg.relay_set1[1];
+            sensor_control[SENSOR1].relay_u8_position = (cap_relay_position_t) rx_message.msg.relay_set1[2];
 
+            sensor_control[SENSOR2].relay_u4_position = (cap_relay_position_t) rx_message.msg.relay_set2[0];
+            sensor_control[SENSOR2].relay_u5_position = (cap_relay_position_t) rx_message.msg.relay_set2[1];
+            sensor_control[SENSOR2].relay_u8_position = (cap_relay_position_t) rx_message.msg.relay_set2[2];
+
+            sensor_control[SENSOR3].relay_u4_position = (cap_relay_position_t) rx_message.msg.relay_set3[0];
+            sensor_control[SENSOR3].relay_u5_position = (cap_relay_position_t) rx_message.msg.relay_set3[1];
+            sensor_control[SENSOR3].relay_u8_position = (cap_relay_position_t) rx_message.msg.relay_set3[2];
+
+            sensor_control[SENSOR4].relay_u4_position = (cap_relay_position_t) rx_message.msg.relay_set4[0];
+            sensor_control[SENSOR4].relay_u5_position = (cap_relay_position_t) rx_message.msg.relay_set4[1];
+            sensor_control[SENSOR4].relay_u8_position = (cap_relay_position_t) rx_message.msg.relay_set4[2];
+
+            sensor_control[SENSOR5].relay_u4_position = (cap_relay_position_t) rx_message.msg.relay_set5[0];
+            sensor_control[SENSOR5].relay_u5_position = (cap_relay_position_t) rx_message.msg.relay_set5[1];
+            sensor_control[SENSOR5].relay_u8_position = (cap_relay_position_t) rx_message.msg.relay_set5[2];
+
+            sensor_control[SENSOR6].relay_u4_position = (cap_relay_position_t) rx_message.msg.relay_set6[0];
+            sensor_control[SENSOR6].relay_u5_position = (cap_relay_position_t) rx_message.msg.relay_set6[1];
+            sensor_control[SENSOR6].relay_u8_position = (cap_relay_position_t) rx_message.msg.relay_set6[2];
         }
     }
 }
