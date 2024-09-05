@@ -297,10 +297,10 @@ typedef enum {
  * IOs 0 and 1 are not used. */
 #define CAP_RELAY_U4_PIN1       0b01000000 // IO6
 #define CAP_RELAY_U4_PIN8       0b10000000 // IO7
-#define CAP_RELAY_U5_PIN1       0b00000010 // IO2
-#define CAP_RELAY_U5_PIN8       0b00000100 // IO3
-#define CAP_RELAY_U8_PIN1       0b00001000 // IO4
-#define CAP_RELAY_U8_PIN8       0b00010000 // IO5
+#define CAP_RELAY_U5_PIN1       0b00000100 // IO2
+#define CAP_RELAY_U5_PIN8       0b00001000 // IO3
+#define CAP_RELAY_U8_PIN1       0b00010000 // IO4
+#define CAP_RELAY_U8_PIN8       0b00100000 // IO5
 
 /* Assert the PIN8 value to connect 6-7 and 3-2
  * Assert the PIN1 value to connect 6-5 and 3-4 */

@@ -569,6 +569,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
     /* Support for the capacitance test set */
     bool *p_max7310_connected             = &(sensor_control[sensor].max7310_connected);
+    bool *p_max7310_configured            = &(sensor_control[sensor].max7310_configured);
     cap_relay_position_t *p_u4_relay      = &(sensor_control[sensor].relay_u4_position);
     cap_relay_position_t *p_u4_relay_prev = &(sensor_control[sensor].relay_u4_position_previous);
     cap_relay_position_t *p_u5_relay      = &(sensor_control[sensor].relay_u5_position);
@@ -699,16 +700,14 @@ void Sensor_Process(sensor_name_t sensor) {
                 *p_cap_connected = false;
             }
 
-#ifdef ZERO
             /* Attempt to init the switching relay.  If that fails, assume the capacitance
              * test set is connected and try using that instead. */
-            if (!Relay_Init(sensor)) {
+            //if (!Relay_Init(sensor)) {
                 *p_max7310_connected = true;
-            } else {
-                *p_max7310_connected = false;
-            }
-#endif
-            *p_max7310_connected = true;
+                *p_max7310_configured = false;
+            //} else {
+            //    *p_max7310_connected = false;
+            //}
 
             /* Always go back to idle so the timers can run */
             TO_STATE(STATE_IDLE);
