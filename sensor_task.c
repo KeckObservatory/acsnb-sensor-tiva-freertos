@@ -547,7 +547,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
     /* Don't process disabled sensors */
     if (!sensor_control[sensor].enabled) {
-        tx_message_raw.msg.sensor[sensor].sensor_connected = false;
+        tx_message_raw.msg.sensor[sensor].sensor_connected = (uint8_t) SENSOR_TYPE_DISCONNECTED;
         tx_message_raw.msg.sensor[sensor].th_connected = false;
         return;
     }
@@ -581,8 +581,21 @@ void Sensor_Process(sensor_name_t sensor) {
     bool *p_ready_flag             = sensor_io[sensor].isr_flag;
 
     /* Update the outbound message fields */
-    tx_message_raw.msg.sensor[sensor].sensor_connected = *p_cap_connected;
-    tx_message_raw.msg.sensor[sensor].th_connected     = *p_th_connected;
+    if (*p_cap_connected) {
+
+        /* Indicate the capacitance testset is connected */
+        if (*p_max7310_connected) {
+            tx_message_raw.msg.sensor[sensor].sensor_connected = (uint8_t) SENSOR_TYPE_CAPACITANCE_TESTSET;
+        } else {
+            tx_message_raw.msg.sensor[sensor].sensor_connected = (uint8_t) SENSOR_TYPE_STANDARD;
+        }
+
+        tx_message_raw.msg.sensor[sensor].th_connected     = *p_th_connected;
+
+    } else {
+        tx_message_raw.msg.sensor[sensor].sensor_connected = (uint8_t) SENSOR_TYPE_DISCONNECTED;
+        tx_message_raw.msg.sensor[sensor].th_connected     = false;
+    }
 
 
     switch (*p_state) {
@@ -618,7 +631,7 @@ void Sensor_Process(sensor_name_t sensor) {
 
                 /* If this is a normal sensor, it will have the PCA9536 relay device.  Else it is
                  * connected to a capacitance sensor test set which uses a MAX7310 */
-                if (*p_max7310_connected) {
+                if (*p_max7310_connected && *p_max7310_configured) {
                     if ((*p_u4_relay != *p_u4_relay_prev) ||
                         (*p_u5_relay != *p_u5_relay_prev) ||
                         (*p_u8_relay != *p_u8_relay_prev)) {
@@ -702,12 +715,17 @@ void Sensor_Process(sensor_name_t sensor) {
 
             /* Attempt to init the switching relay.  If that fails, assume the capacitance
              * test set is connected and try using that instead. */
-            //if (!Relay_Init(sensor)) {
+            if (!Relay_Init(sensor)) {
                 *p_max7310_connected = true;
                 *p_max7310_configured = false;
-            //} else {
-            //    *p_max7310_connected = false;
-            //}
+
+                /* Reinit the I2C bus, this will clear a hung I2C bus from an incomplete transaction */
+                I2C_Init(sensor);
+
+            } else {
+                *p_max7310_connected = false;
+                *p_max7310_configured = false;
+            }
 
             /* Always go back to idle so the timers can run */
             TO_STATE(STATE_IDLE);

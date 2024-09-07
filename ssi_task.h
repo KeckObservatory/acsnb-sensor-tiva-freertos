@@ -38,6 +38,14 @@ uint8_t pui8ControlTable[1024];
  * -----------------------------------------------------------------------------
  */
 
+/* Type of sensor that is connected */
+typedef enum {
+
+    SENSOR_TYPE_DISCONNECTED         = 0,
+    SENSOR_TYPE_STANDARD             = 1,
+    SENSOR_TYPE_CAPACITANCE_TESTSET  = 2
+} sensor_connected_t;
+
 /* Message from the TIVA up to the Beaglebone */
 typedef struct {
 
@@ -52,7 +60,7 @@ typedef struct {
     uint32_t tick_count;
 
     struct {
-        /* [0] Status of the AD7746 sensor */
+        /* [0] Status of the AD7746 sensor, maps to sensor_connected_t */
         uint8_t sensor_connected;
 
         /* [1] Status of the single ended sensing */
