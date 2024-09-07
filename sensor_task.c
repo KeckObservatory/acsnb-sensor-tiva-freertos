@@ -722,6 +722,9 @@ void Sensor_Process(sensor_name_t sensor) {
                 /* Reinit the I2C bus, this will clear a hung I2C bus from an incomplete transaction */
                 I2C_Init(sensor);
 
+                /* Setup the relay device */
+                Cap_Testset_Relays_Set(sensor);
+
             } else {
                 *p_max7310_connected = false;
                 *p_max7310_configured = false;
